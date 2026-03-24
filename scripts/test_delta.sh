@@ -51,12 +51,19 @@ mkdir -p "$TEST_CONFIG_DIR"
 # Copy base inference config
 cp configs/inference.yaml "$TEST_CONFIG_DIR/"
 
-# Override router.yaml — point all domains to the test model
+# Override router.yaml — all 8 domains, all pointing to the single test model
 cat > "$TEST_CONFIG_DIR/router.yaml" << 'YAML'
 domain_classifier:
   model: "bert-base-uncased"
   checkpoint_path: "/models/infrastructure/router/domain_classifier"
   domains:
+    - math
+    - physics
+    - code
+    - chemistry
+    - biology
+    - protein
+    - genomics
     - general
   confidence_threshold: 0.6
   fallback_domain: "general"
@@ -71,11 +78,48 @@ difficulty_estimator:
   default_level: "medium"
 
 hep_subdomain:
-  enabled: false
+  enabled: true
   method: "keyword_plus_classifier"
-  keywords: []
+  keywords:
+    - "higgs"
+    - "quark"
+    - "gluon"
+    - "cross-section"
+    - "luminosity"
+    - "detector"
+    - "calorimeter"
+    - "monte carlo"
+    - "parton"
+    - "collider"
+    - "LHC"
+    - "ATLAS"
+    - "CMS"
+    - "geant4"
+    - "pythia"
+    - "delphes"
 
 domain_to_brain:
+  math:
+    base_model: "qwen2_5_7b"
+    adapter: null
+  physics:
+    base_model: "qwen2_5_7b"
+    adapter: null
+  code:
+    base_model: "qwen2_5_7b"
+    adapter: null
+  chemistry:
+    base_model: "qwen2_5_7b"
+    adapter: null
+  biology:
+    base_model: "qwen2_5_7b"
+    adapter: null
+  protein:
+    base_model: "qwen2_5_7b"
+    adapter: null
+  genomics:
+    base_model: "qwen2_5_7b"
+    adapter: null
   general:
     base_model: "qwen2_5_7b"
     adapter: null
