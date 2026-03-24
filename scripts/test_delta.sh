@@ -22,20 +22,20 @@ set -euo pipefail
 
 # --- Environment setup ---
 module purge
-module load PrgEnv-gnu
-module load cudatoolkit/25.3_12.8
-module load anaconda3
+module load gcc
+module load cuda
 
-# Create/activate conda env (first run only)
-ENV_NAME=jarvis-dev
-if ! conda env list | grep -q "$ENV_NAME"; then
-    echo "Creating conda environment '$ENV_NAME'..."
-    conda create -n "$ENV_NAME" python=3.11 -y
+cd "$HOME/JARVIS"
+
+# Create venv if it doesn't exist
+VENV_DIR="$HOME/JARVIS/.venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating Python venv at $VENV_DIR..."
+    python3 -m venv "$VENV_DIR"
 fi
-conda activate "$ENV_NAME"
+source "$VENV_DIR/bin/activate"
 
 # Install JARVIS with serving deps
-cd "$HOME/JARVIS"
 pip install -e ".[serving,dev]" --quiet
 
 # --- Model setup ---
@@ -127,13 +127,14 @@ SERVER_PID=$!
 
 # Wait for server to be ready
 echo "Waiting for server to start..."
-for i in $(seq 1 120); do
+for i in $(seq 1 180); do
     if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
         echo "Server ready after ${i}s"
         break
     fi
     if ! kill -0 $SERVER_PID 2>/dev/null; then
         echo "ERROR: Server process exited"
+        cat logs/jarvis-test-${SLURM_JOB_ID}.err 2>/dev/null || true
         exit 1
     fi
     sleep 1
