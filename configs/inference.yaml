@@ -1,0 +1,55 @@
+difficulty_levels:
+  easy:
+    strategy: "single_pass"
+    speculative_decoding: true
+    num_candidates: 1
+    thinking_budget_tokens: 4096
+    timeout_seconds: 30
+    kv_cache_dtype: "fp8"
+    max_context_length: 131072
+    verification_chain: false
+    budget_forcing: false
+
+  medium:
+    strategy: "best_of_n"
+    speculative_decoding: true
+    num_candidates: 4
+    thinking_budget_tokens: 16384
+    timeout_seconds: 120
+    kv_cache_dtype: "fp8"
+    max_context_length: 65536
+    verification_chain: true
+    budget_forcing: false
+    voting: "self_consistency"
+
+  hard:
+    strategy: "best_of_n_verified"
+    speculative_decoding: false
+    num_candidates: 16
+    thinking_budget_tokens: 65536
+    timeout_seconds: 600
+    kv_cache_dtype: "fp8"
+    kv_quant_bits: 2
+    max_context_length: 32768
+    verification_chain: true
+    budget_forcing: true
+    budget_forcing_max_waits: 3
+    voting: "self_consistency"
+    verifier: "think_prm"
+    selection: "pessimistic"
+
+speculative_decoding:
+  draft_model: "draft_model"
+  max_draft_tokens: 5
+
+code_verification:
+  enabled: true
+  difficulty_threshold: "hard"
+  sandbox: "docker"
+  max_test_inputs: 10
+  execution_timeout_seconds: 30
+
+context_management:
+  default_kv_dtype: "fp8"
+  ssd_offload_enabled: false
+  ssd_offload_path: "/tmp/kv_cache"

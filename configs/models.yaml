@@ -1,0 +1,123 @@
+base_models:
+  r1_distill_qwen_32b:
+    model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+    architecture: "qwen2.5"
+    path: "/models/brains/r1-distill-qwen-32b"
+    size_gb: 16.0
+    quantization: "nvfp4"
+    context_length: 131072
+    recommended_max_context: 32768
+    load_policy: "always_resident"
+    roles: ["physics", "math"]
+
+  qwen3_32b:
+    model_id: "Qwen/Qwen3-32B"
+    architecture: "qwen3"
+    path: "/models/brains/qwen3-32b"
+    size_gb: 16.0
+    quantization: "nvfp4"
+    context_length: 32768
+    recommended_max_context: 32768
+    load_policy: "always_resident"
+    roles: ["code"]
+
+  r1_distill_llama_70b:
+    model_id: "deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
+    architecture: "llama3.3"
+    path: "/models/brains/r1-distill-llama-70b"
+    size_gb: 35.0
+    quantization: "nvfp4"
+    context_length: 131072
+    recommended_max_context: 32768
+    load_policy: "optional"
+    roles: ["math"]
+
+lora_adapters:
+  physics_general:
+    base_model: "r1_distill_qwen_32b"
+    path: "/models/adapters/physics_general"
+    size_gb: 0.3
+
+  physics_hep:
+    base_model: "r1_distill_qwen_32b"
+    path: "/models/adapters/physics_hep"
+    size_gb: 0.3
+
+  math_adapter:
+    base_model: "r1_distill_qwen_32b"
+    path: "/models/adapters/math_adapter"
+    size_gb: 0.3
+
+  code_general:
+    base_model: "qwen3_32b"
+    path: "/models/adapters/code_general"
+    size_gb: 0.3
+
+  code_hep:
+    base_model: "qwen3_32b"
+    path: "/models/adapters/code_hep"
+    size_gb: 0.3
+
+infrastructure:
+  router:
+    model_id: "bert-base-uncased"
+    path: "/models/infrastructure/router"
+    size_gb: 0.06
+    load_policy: "always_resident"
+
+  think_prm:
+    model_id: "PRIME-RL/ThinkPRM-1.5B"
+    path: "/models/infrastructure/think-prm"
+    size_gb: 0.8
+    load_policy: "always_resident"
+
+  draft_model:
+    model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+    path: "/models/infrastructure/draft-model"
+    size_gb: 0.8
+    load_policy: "always_resident"
+
+  rag_embedding:
+    model_id: "sentence-transformers/all-MiniLM-L6-v2"
+    path: "/models/infrastructure/rag-embedding"
+    size_gb: 0.09
+    load_policy: "always_resident"
+
+specialists:
+  chemistry:
+    model_id: "AI4Chem/ChemLLM-7B-Chat"
+    path: "/models/specialists/chemllm-7b"
+    size_gb: 3.5
+    quantization: "nvfp4"
+    type: "text_llm"
+    router_domain: "chemistry"
+    load_policy: "on_demand"
+
+  biology:
+    model_id: "BioMistral/BioMistral-7B"
+    path: "/models/specialists/biomistral-7b"
+    size_gb: 3.5
+    quantization: "nvfp4"
+    type: "text_llm"
+    router_domain: "biology"
+    load_policy: "on_demand"
+
+  protein:
+    model_id: "EvolutionaryScale/esm3-sm-open-v1"
+    path: "/models/specialists/esm3-open"
+    size_gb: 0.7
+    quantization: "fp16"
+    type: "protein_model"
+    router_domain: "protein"
+    load_policy: "on_demand"
+    api_adapter: "esm3"
+
+  genomics:
+    model_id: "arcinstitute/evo2-7b"
+    path: "/models/specialists/evo2-7b"
+    size_gb: 3.5
+    quantization: "nvfp4"
+    type: "dna_model"
+    router_domain: "genomics"
+    load_policy: "on_demand"
+    api_adapter: "evo2"

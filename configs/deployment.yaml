@@ -1,0 +1,16 @@
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+
+memory_budget:
+  total_gb: 128
+  reserved_os_gb: 5
+  reserved_framework_gb: 7
+  safety_margin_gb: 5
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+model_dir: "/models"

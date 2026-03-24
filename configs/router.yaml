@@ -1,0 +1,68 @@
+domain_classifier:
+  model: "bert-base-uncased"
+  checkpoint_path: "/models/infrastructure/router/domain_classifier"
+  domains:
+    - math
+    - physics
+    - code
+    - chemistry
+    - biology
+    - protein
+    - genomics
+    - general
+  confidence_threshold: 0.6
+  fallback_domain: "general"
+
+difficulty_estimator:
+  model: "bert-base-uncased"
+  checkpoint_path: "/models/infrastructure/router/difficulty_estimator"
+  levels:
+    - easy
+    - medium
+    - hard
+  default_level: "medium"
+
+hep_subdomain:
+  enabled: true
+  method: "keyword_plus_classifier"
+  keywords:
+    - "higgs"
+    - "quark"
+    - "gluon"
+    - "cross-section"
+    - "luminosity"
+    - "detector"
+    - "calorimeter"
+    - "monte carlo"
+    - "parton"
+    - "collider"
+    - "LHC"
+    - "ATLAS"
+    - "CMS"
+    - "geant4"
+    - "pythia"
+    - "delphes"
+
+domain_to_brain:
+  math:
+    base_model: "r1_distill_qwen_32b"
+    adapter: "math_adapter"
+  physics:
+    base_model: "r1_distill_qwen_32b"
+    adapter: "physics_general"
+    hep_adapter: "physics_hep"
+  code:
+    base_model: "qwen3_32b"
+    adapter: "code_general"
+    hep_adapter: "code_hep"
+  chemistry:
+    specialist: "chemistry"
+  biology:
+    specialist: "biology"
+  protein:
+    specialist: "protein"
+  genomics:
+    specialist: "genomics"
+  general:
+    base_model: "r1_distill_qwen_32b"
+    adapter: null
