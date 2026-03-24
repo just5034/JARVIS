@@ -22,7 +22,7 @@ set -euo pipefail
 
 # --- Environment setup ---
 module purge
-module load gcc
+module load python/3.13.5-gcc13.3.1
 module load cuda
 
 cd "$HOME/JARVIS"
