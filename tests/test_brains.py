@@ -138,3 +138,55 @@ def test_generation_result() -> None:
     )
     assert result.text == "Hello"
     assert result.prompt_tokens == 5
+
+
+# --- Adapter constraint enforcement ---
+
+
+def test_swap_adapter_cross_base_rejected(config: JarvisConfig) -> None:
+    """Code adapter must not load on physics base model."""
+    mgr = BrainManager(config)
+    mock_handle = MagicMock(spec=LoadedModelHandle)
+    mgr._models["r1_distill_qwen_32b"] = mock_handle
+    mgr._active_adapters["r1_distill_qwen_32b"] = None
+
+    with pytest.raises(ValueError, match="cannot be loaded on"):
+        mgr.swap_adapter("r1_distill_qwen_32b", "code_general")
+
+
+def test_swap_adapter_same_base_accepted(config: JarvisConfig) -> None:
+    """Physics adapter on physics base should work."""
+    mgr = BrainManager(config)
+    mock_handle = MagicMock(spec=LoadedModelHandle)
+    mgr._models["r1_distill_qwen_32b"] = mock_handle
+    mgr._active_adapters["r1_distill_qwen_32b"] = None
+
+    mgr.swap_adapter("r1_distill_qwen_32b", "physics_general")
+    assert mgr.get_active_adapter("r1_distill_qwen_32b") == "physics_general"
+
+
+def test_swap_adapter_clear(config: JarvisConfig) -> None:
+    """Setting adapter to None clears it."""
+    mgr = BrainManager(config)
+    mock_handle = MagicMock(spec=LoadedModelHandle)
+    mgr._models["r1_distill_qwen_32b"] = mock_handle
+    mgr._active_adapters["r1_distill_qwen_32b"] = "physics_general"
+
+    mgr.swap_adapter("r1_distill_qwen_32b", None)
+    assert mgr.get_active_adapter("r1_distill_qwen_32b") is None
+
+
+def test_swap_adapter_unknown_base(config: JarvisConfig) -> None:
+    mgr = BrainManager(config)
+    with pytest.raises(ValueError, match="not loaded"):
+        mgr.swap_adapter("nonexistent", "physics_general")
+
+
+def test_swap_adapter_unknown_adapter(config: JarvisConfig) -> None:
+    mgr = BrainManager(config)
+    mock_handle = MagicMock(spec=LoadedModelHandle)
+    mgr._models["r1_distill_qwen_32b"] = mock_handle
+    mgr._active_adapters["r1_distill_qwen_32b"] = None
+
+    with pytest.raises(ValueError, match="Unknown adapter"):
+        mgr.swap_adapter("r1_distill_qwen_32b", "nonexistent_adapter")

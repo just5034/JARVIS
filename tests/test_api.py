@@ -206,3 +206,50 @@ def test_admin_load_invalid_action(client: TestClient) -> None:
         json={"model": "r1_distill_qwen_32b", "action": "restart"},
     )
     assert response.status_code == 400
+
+
+# --- Phase 2: routing metadata in responses ---
+
+
+def test_routing_metadata_in_response(client_with_model: TestClient) -> None:
+    response = client_with_model.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [
+                {"role": "user", "content": "Calculate the Higgs boson decay width"}
+            ],
+        },
+    )
+    data = response.json()
+    meta = data["jarvis_metadata"]
+    # Router should classify this as physics
+    assert meta["routed_domain"] == "physics"
+    assert meta["difficulty"] in ("easy", "medium", "hard")
+
+
+def test_forced_model_field(client_with_model: TestClient) -> None:
+    response = client_with_model.post(
+        "/v1/chat/completions",
+        json={
+            "model": "math",
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+    data = response.json()
+    meta = data["jarvis_metadata"]
+    assert meta["routed_domain"] == "math"
+
+
+def test_auto_model_field(client_with_model: TestClient) -> None:
+    response = client_with_model.post(
+        "/v1/chat/completions",
+        json={
+            "model": "auto",
+            "messages": [
+                {"role": "user", "content": "Write a Python sort function"}
+            ],
+        },
+    )
+    data = response.json()
+    meta = data["jarvis_metadata"]
+    assert meta["routed_domain"] == "code"

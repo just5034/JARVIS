@@ -8,6 +8,7 @@ import time
 from jarvis.brains.memory_tracker import MemoryTracker
 from jarvis.brains.model_loader import LoadedModelHandle, load_model
 from jarvis.config import JarvisConfig
+from jarvis.router.router import RoutingDecision
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +30,12 @@ class BrainManager:
     def get_loaded_model_keys(self) -> list[str]:
         return list(self._models.keys())
 
+    def get_active_adapter(self, base_key: str) -> str | None:
+        return self._active_adapters.get(base_key)
+
     def get_default_model(self) -> LoadedModelHandle | None:
         if self._default_model and self._default_model in self._models:
             return self._models[self._default_model]
-        # Return first loaded model as fallback
         if self._models:
             return next(iter(self._models.values()))
         return None
@@ -69,11 +72,11 @@ class BrainManager:
                 gpu_memory_utilization=gpu_memory_utilization,
             )
         except Exception:
-            # Roll back memory registration on failure
             self.memory.unregister(model_key)
             raise
 
         self._models[model_key] = handle
+        self._active_adapters[model_key] = None
 
         if set_default or self._default_model is None:
             self._default_model = model_key
@@ -88,6 +91,7 @@ class BrainManager:
             return
 
         self.memory.unregister(model_key)
+        self._active_adapters.pop(model_key, None)
 
         if self._default_model == model_key:
             self._default_model = next(iter(self._models), None)
@@ -95,13 +99,82 @@ class BrainManager:
         logger.info("Model '%s' unloaded", model_key)
 
     def swap_adapter(self, base_key: str, adapter_key: str | None) -> None:
-        """Hot-swap a LoRA adapter on a loaded base model."""
-        # Phase 2: implement via vLLM's LoRA support
-        raise NotImplementedError("Phase 2: LoRA adapter hot-swapping")
+        """Hot-swap a LoRA adapter on a loaded base model.
+
+        Enforces the cross-base adapter constraint: physics adapters only on
+        r1_distill_qwen_32b, code adapters only on qwen3_32b.
+        """
+        if base_key not in self._models:
+            raise ValueError(f"Base model '{base_key}' is not loaded")
+
+        current = self._active_adapters.get(base_key)
+        if current == adapter_key:
+            return  # Already active
+
+        if adapter_key is not None:
+            # Validate adapter exists and is compatible with this base
+            adapter_config = self.config.models.lora_adapters.get(adapter_key)
+            if adapter_config is None:
+                raise ValueError(
+                    f"Unknown adapter '{adapter_key}'. "
+                    f"Available: {list(self.config.models.lora_adapters.keys())}"
+                )
+            if adapter_config.base_model != base_key:
+                raise ValueError(
+                    f"Adapter '{adapter_key}' is trained on '{adapter_config.base_model}' "
+                    f"and cannot be loaded on '{base_key}'. "
+                    f"Cross-base adapter loading is not supported."
+                )
+
+            # TODO: When LoRA adapters are trained (Phase 4), integrate vLLM's
+            # LoRA support here. vLLM supports dynamic LoRA loading via
+            # llm.llm_engine.add_lora() / remove_lora().
+            # For now, just track which adapter is "active" for metadata purposes.
+            logger.info("Adapter '%s' set as active on '%s'", adapter_key, base_key)
+        else:
+            logger.info("Cleared adapter on '%s' (raw base model)", base_key)
+
+        self._active_adapters[base_key] = adapter_key
+
+    def resolve_for_routing(self, decision: RoutingDecision) -> LoadedModelHandle:
+        """Resolve a routing decision to a loaded model, swapping adapters as needed.
+
+        Falls back gracefully: if the exact model isn't loaded, uses the default.
+        """
+        # Specialist routing (Phase 5)
+        if decision.specialist:
+            logger.info(
+                "Specialist '%s' requested but not yet implemented, using default model",
+                decision.specialist,
+            )
+            model = self.get_default_model()
+            if model is None:
+                raise RuntimeError("No models loaded")
+            return model
+
+        # Brain routing
+        if decision.base_model:
+            model = self._models.get(decision.base_model)
+            if model is not None:
+                # Swap adapter if needed
+                try:
+                    self.swap_adapter(decision.base_model, decision.adapter)
+                except ValueError as e:
+                    logger.warning("Adapter swap failed: %s", e)
+                return model
+            else:
+                logger.warning(
+                    "Routed to '%s' but it's not loaded, falling back to default",
+                    decision.base_model,
+                )
+
+        model = self.get_default_model()
+        if model is None:
+            raise RuntimeError("No models loaded")
+        return model
 
     def get_model_for_domain(self, domain: str, is_hep: bool = False) -> LoadedModelHandle:
-        """Resolve a domain to a loaded model. Phase 1: returns default model."""
-        # Phase 2 will use router config to map domain → base + adapter
+        """Resolve a domain to a loaded model (legacy Phase 1 interface)."""
         model = self.get_default_model()
         if model is None:
             raise RuntimeError("No models loaded")

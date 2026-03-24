@@ -31,18 +31,25 @@ from jarvis.api.models import (
 from jarvis.brains.brain_manager import BrainManager
 from jarvis.brains.model_loader import GenerationRequest
 from jarvis.config import JarvisConfig
+from jarvis.router.router import Router
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _config: JarvisConfig | None = None
 _brain_manager: BrainManager | None = None
+_router: Router | None = None
 
 
-def set_state(config: JarvisConfig, brain_manager: BrainManager) -> None:
-    global _config, _brain_manager
+def set_state(
+    config: JarvisConfig,
+    brain_manager: BrainManager,
+    query_router: Router | None = None,
+) -> None:
+    global _config, _brain_manager, _router
     _config = config
     _brain_manager = brain_manager
+    _router = query_router
 
 
 def _get_config() -> JarvisConfig:
@@ -55,6 +62,10 @@ def _get_brains() -> BrainManager:
     if _brain_manager is None:
         raise RuntimeError("BrainManager not initialized")
     return _brain_manager
+
+
+def _get_router() -> Router | None:
+    return _router
 
 
 @router.get("/health")
@@ -82,6 +93,7 @@ async def list_models() -> ModelListResponse:
 @router.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
     brains = _get_brains()
+    query_router = _get_router()
     start_time = time.monotonic()
 
     if not brains.has_models:
@@ -90,11 +102,29 @@ async def chat_completions(request: ChatCompletionRequest):
             detail="No models loaded. Load a model via POST /admin/load first.",
         )
 
-    # Phase 1: use default model for all requests
-    # Phase 2: will route based on request.model field
-    model = brains.get_default_model()
-    if model is None:
-        raise HTTPException(status_code=503, detail="No models available")
+    # Extract query text for routing
+    user_messages = [m for m in request.messages if m.role == "user"]
+    system_messages = [m for m in request.messages if m.role == "system"]
+    query_text = user_messages[-1].content if user_messages else ""
+    system_prompt = system_messages[0].content if system_messages else None
+
+    # Route the query
+    routing_decision = None
+    if query_router is not None:
+        force_domain = None
+        if request.model and request.model not in ("", "auto"):
+            force_domain = request.model
+
+        routing_decision = query_router.route(
+            query=query_text,
+            system_prompt=system_prompt,
+            force_domain=force_domain,
+        )
+        model = brains.resolve_for_routing(routing_decision)
+    else:
+        model = brains.get_default_model()
+        if model is None:
+            raise HTTPException(status_code=503, detail="No models available")
 
     # Build generation request
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
@@ -115,7 +145,7 @@ async def chat_completions(request: ChatCompletionRequest):
     )
 
     if request.stream:
-        return _stream_response(model, gen_request, start_time)
+        return _stream_response(model, gen_request, start_time, routing_decision)
 
     # Non-streaming: generate and return full response
     try:
@@ -136,7 +166,6 @@ async def chat_completions(request: ChatCompletionRequest):
             )
         )
 
-    # Use first result for usage stats
     first = results[0]
     usage = Usage(
         prompt_tokens=first.prompt_tokens,
@@ -145,9 +174,12 @@ async def chat_completions(request: ChatCompletionRequest):
     )
 
     metadata = JarvisMetadata(
+        routed_domain=routing_decision.domain if routing_decision else None,
+        difficulty=routing_decision.difficulty if routing_decision else None,
         inference_strategy="single_pass",
         num_candidates=request.n,
         base_model=model.model_key,
+        adapter=routing_decision.adapter if routing_decision else None,
         latency_ms=round(elapsed_ms, 1),
     )
 
@@ -159,14 +191,13 @@ async def chat_completions(request: ChatCompletionRequest):
     )
 
 
-def _stream_response(model, gen_request: GenerationRequest, start_time: float):
+def _stream_response(model, gen_request, start_time, routing_decision=None):
     """Return an SSE streaming response."""
 
     async def event_generator():
         chunk_id = f"chatcmpl-{int(time.time())}"
         created = int(time.time())
 
-        # First chunk: role
         first_chunk = ChatCompletionChunk(
             id=chunk_id,
             created=created,
@@ -181,8 +212,6 @@ def _stream_response(model, gen_request: GenerationRequest, start_time: float):
         )
         yield f"data: {first_chunk.model_dump_json()}\n\n"
 
-        # Generate — sync fallback, yields full text as one chunk
-        # Phase 3 will use AsyncLLMEngine for true token-by-token streaming
         try:
             for result in model.generate_stream(gen_request):
                 content_chunk = ChatCompletionChunk(
@@ -199,7 +228,6 @@ def _stream_response(model, gen_request: GenerationRequest, start_time: float):
                 )
                 yield f"data: {content_chunk.model_dump_json()}\n\n"
 
-                # Final chunk with finish_reason
                 done_chunk = ChatCompletionChunk(
                     id=chunk_id,
                     created=created,
@@ -255,7 +283,6 @@ async def admin_load(request: AdminLoadRequest) -> AdminLoadResponse:
         try:
             start = time.monotonic()
             brains.load_base_model(request.model, set_default=True)
-            elapsed_ms = (time.monotonic() - start) * 1000
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except MemoryError as e:

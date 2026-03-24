@@ -212,6 +212,42 @@ curl -s -N -X POST http://localhost:8000/v1/chat/completions \
 
 echo ""
 echo ""
+echo "=== Phase 2: Routing tests ==="
+
+echo "--- Physics query (should route to physics) ---"
+curl -s -X POST http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "messages": [{"role": "user", "content": "Derive the Schwarzschild metric from general relativity"}],
+        "max_tokens": 64
+    }' | python -c "import sys,json; d=json.load(sys.stdin); m=d['jarvis_metadata']; print(f'  domain={m[\"routed_domain\"]} difficulty={m[\"difficulty\"]} model={m[\"base_model\"]}')"
+
+echo "--- Code query (should route to code) ---"
+curl -s -X POST http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "messages": [{"role": "user", "content": "Write a Python function to implement quicksort"}],
+        "max_tokens": 64
+    }' | python -c "import sys,json; d=json.load(sys.stdin); m=d['jarvis_metadata']; print(f'  domain={m[\"routed_domain\"]} difficulty={m[\"difficulty\"]} model={m[\"base_model\"]}')"
+
+echo "--- Math query (should route to math) ---"
+curl -s -X POST http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "messages": [{"role": "user", "content": "Prove that the square root of 2 is irrational"}],
+        "max_tokens": 64
+    }' | python -c "import sys,json; d=json.load(sys.stdin); m=d['jarvis_metadata']; print(f'  domain={m[\"routed_domain\"]} difficulty={m[\"difficulty\"]} model={m[\"base_model\"]}')"
+
+echo "--- Forced domain (model=physics on a code question) ---"
+curl -s -X POST http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "physics",
+        "messages": [{"role": "user", "content": "Hello world"}],
+        "max_tokens": 32
+    }' | python -c "import sys,json; d=json.load(sys.stdin); m=d['jarvis_metadata']; print(f'  domain={m[\"routed_domain\"]} difficulty={m[\"difficulty\"]} model={m[\"base_model\"]}')"
+
+echo ""
 echo "=== All smoke tests complete ==="
 
 # --- Cleanup ---

@@ -39,18 +39,26 @@ def cmd_serve(args: argparse.Namespace) -> None:
     port = args.port or config.deployment.server.port
 
     from jarvis.brains.brain_manager import BrainManager
+    from jarvis.router.router import Router
 
     brain_manager = BrainManager(config)
 
-    # Auto-load a model at startup if specified
+    # Initialize router (loads BERT classifiers if available, else uses keywords)
+    query_router = Router(config)
+    query_router.load()
+    logger.info("Router initialized (domain + difficulty classification)")
+
+    # Auto-load models at startup if specified
     if args.load_model:
-        logger.info("Loading model '%s' at startup...", args.load_model)
-        brain_manager.load_base_model(args.load_model, set_default=True)
-        logger.info("Model '%s' ready", args.load_model)
+        for model_key in args.load_model.split(","):
+            model_key = model_key.strip()
+            logger.info("Loading model '%s' at startup...", model_key)
+            brain_manager.load_base_model(model_key, set_default=True)
+            logger.info("Model '%s' ready", model_key)
 
     from jarvis.api.server import create_app
 
-    app = create_app(config, brain_manager=brain_manager)
+    app = create_app(config, brain_manager=brain_manager, query_router=query_router)
 
     import uvicorn
 
@@ -99,7 +107,7 @@ def main() -> None:
         "--load-model",
         type=str,
         default=None,
-        help="Model key to load at startup (e.g., 'r1_distill_qwen_32b')",
+        help="Model key(s) to load at startup, comma-separated (e.g., 'r1_distill_qwen_32b,qwen3_32b')",
     )
 
     # validate
