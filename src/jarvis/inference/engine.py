@@ -16,6 +16,8 @@ from jarvis.inference.budget_forcing import BudgetForcer
 from jarvis.inference.sampling import CandidateSampler
 from jarvis.inference.verification import ThinkPRMVerifier
 from jarvis.inference.voting import SelfConsistencyVoter
+from jarvis.rag.augmenter import PromptAugmenter
+from jarvis.rag.retriever import PhysicsRetriever
 
 if TYPE_CHECKING:
     from jarvis.brains.model_loader import LoadedModelHandle
@@ -49,13 +51,19 @@ class InferenceResult:
 class InferenceEngine:
     """Selects and runs the inference strategy based on difficulty level."""
 
-    def __init__(self, config: InferenceConfig) -> None:
+    def __init__(
+        self,
+        config: InferenceConfig,
+        retriever: PhysicsRetriever | None = None,
+    ) -> None:
         self.config = config
         self._sampler = CandidateSampler()
         self._voter = SelfConsistencyVoter()
         self._verifier = ThinkPRMVerifier()
         self._budget_forcer = BudgetForcer()
         self._verifier_loaded = False
+        self._retriever = retriever
+        self._augmenter = PromptAugmenter()
 
     def _ensure_verifier(self) -> None:
         """Lazy-load the verifier on first hard query."""
@@ -101,8 +109,21 @@ class InferenceEngine:
 
         strategy = level_config.strategy
 
-        # Apply verification chain for medium/hard
+        # Apply RAG augmentation for physics queries
         gen_messages = messages
+        if domain == "physics" and self._retriever and self._retriever.loaded:
+            user_text = ""
+            for m in reversed(messages):
+                if m["role"] == "user":
+                    user_text = m["content"]
+                    break
+            if user_text:
+                passages = self._retriever.retrieve(user_text, top_k=5)
+                if passages:
+                    gen_messages = self._augmenter.augment(gen_messages, passages)
+                    logger.info("RAG: augmented physics query with %d passages", len(passages))
+
+        # Apply verification chain for medium/hard
         if level_config.verification_chain:
             gen_messages = self._apply_verification_chain(messages, domain)
 

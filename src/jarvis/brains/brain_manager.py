@@ -1,4 +1,4 @@
-"""Brain Manager — model loading, LoRA adapter swapping, memory tracking."""
+"""Brain Manager — model loading, LoRA adapter swapping, specialist routing."""
 
 from __future__ import annotations
 
@@ -9,12 +9,14 @@ from jarvis.brains.memory_tracker import MemoryTracker
 from jarvis.brains.model_loader import LoadedModelHandle, load_model
 from jarvis.config import JarvisConfig
 from jarvis.router.router import RoutingDecision
+from jarvis.specialists.loader import SpecialistLoader
+from jarvis.specialists.registry import SpecialistRegistry
 
 logger = logging.getLogger(__name__)
 
 
 class BrainManager:
-    """Manages base model loading and LoRA adapter hot-swapping."""
+    """Manages base model loading, LoRA adapter swapping, and specialist routing."""
 
     def __init__(self, config: JarvisConfig) -> None:
         self.config = config
@@ -22,13 +24,25 @@ class BrainManager:
         self._models: dict[str, LoadedModelHandle] = {}
         self._active_adapters: dict[str, str | None] = {}
         self._default_model: str | None = None
+        self._specialist_registry = SpecialistRegistry(config.models)
+        self._specialist_loader = SpecialistLoader(self.memory, config.deployment.model_dir)
 
     @property
     def has_models(self) -> bool:
         return len(self._models) > 0
 
+    @property
+    def specialist_registry(self) -> SpecialistRegistry:
+        return self._specialist_registry
+
+    @property
+    def specialist_loader(self) -> SpecialistLoader:
+        return self._specialist_loader
+
     def get_loaded_model_keys(self) -> list[str]:
-        return list(self._models.keys())
+        keys = list(self._models.keys())
+        keys.extend(self._specialist_loader.list_loaded())
+        return keys
 
     def get_active_adapter(self, base_key: str) -> str | None:
         return self._active_adapters.get(base_key)
@@ -61,7 +75,6 @@ class BrainManager:
                 f"Available: {list(self.config.models.base_models.keys())}"
             )
 
-        # Check memory budget
         self.memory.register(model_key, model_config.size_gb, "base")
 
         try:
@@ -99,20 +112,15 @@ class BrainManager:
         logger.info("Model '%s' unloaded", model_key)
 
     def swap_adapter(self, base_key: str, adapter_key: str | None) -> None:
-        """Hot-swap a LoRA adapter on a loaded base model.
-
-        Enforces the cross-base adapter constraint: physics adapters only on
-        r1_distill_qwen_32b, code adapters only on qwen3_32b.
-        """
+        """Hot-swap a LoRA adapter on a loaded base model."""
         if base_key not in self._models:
             raise ValueError(f"Base model '{base_key}' is not loaded")
 
         current = self._active_adapters.get(base_key)
         if current == adapter_key:
-            return  # Already active
+            return
 
         if adapter_key is not None:
-            # Validate adapter exists and is compatible with this base
             adapter_config = self.config.models.lora_adapters.get(adapter_key)
             if adapter_config is None:
                 raise ValueError(
@@ -125,26 +133,48 @@ class BrainManager:
                     f"and cannot be loaded on '{base_key}'. "
                     f"Cross-base adapter loading is not supported."
                 )
-
-            # TODO: When LoRA adapters are trained (Phase 4), integrate vLLM's
-            # LoRA support here. vLLM supports dynamic LoRA loading via
-            # llm.llm_engine.add_lora() / remove_lora().
-            # For now, just track which adapter is "active" for metadata purposes.
             logger.info("Adapter '%s' set as active on '%s'", adapter_key, base_key)
         else:
             logger.info("Cleared adapter on '%s' (raw base model)", base_key)
 
         self._active_adapters[base_key] = adapter_key
 
-    def resolve_for_routing(self, decision: RoutingDecision) -> LoadedModelHandle:
-        """Resolve a routing decision to a loaded model, swapping adapters as needed.
+    async def resolve_for_routing_async(self, decision: RoutingDecision) -> LoadedModelHandle:
+        """Resolve a routing decision, loading specialists on demand if needed."""
+        # Specialist routing
+        if decision.specialist:
+            spec_config = self._specialist_registry.get(decision.specialist)
+            if spec_config is not None:
+                try:
+                    specialist = await self._specialist_loader.load(
+                        decision.specialist, spec_config
+                    )
+                    logger.info("Specialist '%s' loaded for routing", decision.specialist)
+                    # Wrap specialist in a LoadedModelHandle-compatible interface
+                    # For now, fall back to default model since specialists need
+                    # their own generate() path — the adapter handles I/O translation
+                    # TODO: Build SpecialistModelHandle that wraps adapter + model
+                except Exception as e:
+                    logger.warning(
+                        "Failed to load specialist '%s': %s, falling back to default",
+                        decision.specialist, e,
+                    )
 
-        Falls back gracefully: if the exact model isn't loaded, uses the default.
-        """
-        # Specialist routing (Phase 5)
+            # Fall back to default model (specialist queries still get routed
+            # through the default brain until specialist inference is fully wired)
+            model = self.get_default_model()
+            if model is None:
+                raise RuntimeError("No models loaded")
+            return model
+
+        return self.resolve_for_routing(decision)
+
+    def resolve_for_routing(self, decision: RoutingDecision) -> LoadedModelHandle:
+        """Resolve a routing decision to a loaded model (sync version)."""
+        # Specialist routing — sync fallback to default
         if decision.specialist:
             logger.info(
-                "Specialist '%s' requested but not yet implemented, using default model",
+                "Specialist '%s' requested, falling back to default model (use async for on-demand loading)",
                 decision.specialist,
             )
             model = self.get_default_model()
@@ -156,7 +186,6 @@ class BrainManager:
         if decision.base_model:
             model = self._models.get(decision.base_model)
             if model is not None:
-                # Swap adapter if needed
                 try:
                     self.swap_adapter(decision.base_model, decision.adapter)
                 except ValueError as e:

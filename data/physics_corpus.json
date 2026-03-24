@@ -1,0 +1,152 @@
+[
+  {
+    "id": "const_speed_of_light",
+    "category": "constants",
+    "text": "The speed of light in vacuum is c = 299,792,458 m/s (exact). In natural units used in particle physics, c = 1. The reduced Planck constant ℏ = 1.054571817 × 10⁻³⁴ J·s. In natural units, ℏ = 1, and energies are measured in eV or GeV."
+  },
+  {
+    "id": "const_fine_structure",
+    "category": "constants",
+    "text": "The fine-structure constant α = e²/(4πε₀ℏc) ≈ 1/137.036. It characterizes the strength of electromagnetic interactions. At the Z boson mass scale (91.2 GeV), the running coupling is α(M_Z) ≈ 1/128."
+  },
+  {
+    "id": "const_strong_coupling",
+    "category": "constants",
+    "text": "The strong coupling constant α_s(M_Z) = 0.1179 ± 0.0009 at the Z boson mass. It runs logarithmically with energy: α_s decreases at higher energies (asymptotic freedom). At 1 GeV, α_s ≈ 0.5. The QCD scale parameter Λ_QCD ≈ 200-300 MeV."
+  },
+  {
+    "id": "const_weak_coupling",
+    "category": "constants",
+    "text": "The Fermi coupling constant G_F = 1.1663788 × 10⁻⁵ GeV⁻². The weak mixing angle sin²θ_W = 0.23122 ± 0.00003. The W boson mass M_W = 80.377 ± 0.012 GeV. The Z boson mass M_Z = 91.1876 ± 0.0021 GeV."
+  },
+  {
+    "id": "particle_higgs",
+    "category": "particles",
+    "text": "The Higgs boson mass is m_H = 125.25 ± 0.17 GeV (PDG 2023). It was discovered at CERN in 2012 by the ATLAS and CMS experiments. The Higgs total width is Γ_H ≈ 3.2 MeV. Dominant decay modes: H→bb̄ (58%), H→WW* (21%), H→gg (8.2%), H→ττ (6.3%), H→cc̄ (2.9%), H→ZZ* (2.6%), H→γγ (0.23%)."
+  },
+  {
+    "id": "particle_top_quark",
+    "category": "particles",
+    "text": "The top quark mass is m_t = 172.69 ± 0.30 GeV (direct measurements). It is the heaviest known elementary particle. The top quark decays almost exclusively to Wb (BR ≈ 99.8%). Its lifetime τ_t ≈ 5 × 10⁻²⁵ s is shorter than the QCD hadronization time, so it decays before forming hadrons."
+  },
+  {
+    "id": "particle_w_boson",
+    "category": "particles",
+    "text": "The W boson mass is M_W = 80.377 ± 0.012 GeV. The W boson width is Γ_W = 2.085 ± 0.042 GeV. W bosons decay to lepton-neutrino pairs (BR ≈ 10.8% each for e, μ, τ) and quark pairs (BR ≈ 67.4% hadronic). W bosons are produced in pp collisions primarily via quark-antiquark annihilation: ud̄ → W⁺."
+  },
+  {
+    "id": "particle_z_boson",
+    "category": "particles",
+    "text": "The Z boson mass is M_Z = 91.1876 ± 0.0021 GeV. The Z boson width is Γ_Z = 2.4952 ± 0.0023 GeV. Z decays to fermion-antifermion pairs: ee (3.36%), μμ (3.37%), ττ (3.37%), neutrinos (20.0%), hadrons (69.9%). The number of light neutrino generations N_ν = 2.9840 ± 0.0082."
+  },
+  {
+    "id": "particle_quarks",
+    "category": "particles",
+    "text": "Quark masses (PDG 2023): up m_u = 2.16 MeV, down m_d = 4.67 MeV, strange m_s = 93.4 MeV, charm m_c = 1.27 GeV, bottom m_b = 4.18 GeV (MS-bar), top m_t = 172.69 GeV (pole mass). Quarks carry color charge (red, green, blue) and fractional electric charge (+2/3 for u,c,t; -1/3 for d,s,b)."
+  },
+  {
+    "id": "particle_leptons",
+    "category": "particles",
+    "text": "Lepton masses: electron m_e = 0.511 MeV, muon m_μ = 105.66 MeV, tau m_τ = 1776.86 MeV. Neutrino mass differences: Δm²₂₁ = 7.53 × 10⁻⁵ eV², |Δm²₃₂| = 2.453 × 10⁻³ eV². The tau lepton lifetime is τ_τ = 2.903 × 10⁻¹³ s."
+  },
+  {
+    "id": "eq_cross_section",
+    "category": "equations",
+    "text": "The differential cross-section for 2→2 scattering is dσ/dΩ = |M|²/(64π²s), where M is the matrix element and √s is the center-of-mass energy. For the Drell-Yan process qq̄→ℓ⁺ℓ⁻, the leading-order cross-section is σ = (4πα²)/(3s) × Σ_q e_q² × (parton luminosity). Total pp cross-section at √s=13 TeV: σ_tot ≈ 100 mb."
+  },
+  {
+    "id": "eq_decay_width",
+    "category": "equations",
+    "text": "The partial decay width for a particle of mass M decaying to two particles is Γ = |p|/(8πM²) × |M|² × (symmetry factors), where |p| is the magnitude of the 3-momentum of either final-state particle in the rest frame. For H→ff̄: Γ = (N_c × G_F × m_f² × m_H)/(4√2π) × β³, where β = √(1 - 4m_f²/m_H²)."
+  },
+  {
+    "id": "eq_running_coupling",
+    "category": "equations",
+    "text": "The QCD running coupling at one-loop: α_s(μ²) = α_s(μ₀²)/[1 + (α_s(μ₀²)/(2π)) × b₀ × ln(μ²/μ₀²)], where b₀ = (33 - 2n_f)/6 for n_f active quark flavors. At two-loop, additional b₁ = (153 - 19n_f)/6 corrections apply. Asymptotic freedom requires b₀ > 0, satisfied for n_f ≤ 16."
+  },
+  {
+    "id": "eq_breit_wigner",
+    "category": "equations",
+    "text": "The relativistic Breit-Wigner resonance formula: σ(s) = 12π/M² × Γ_i×Γ_f/[(s-M²)² + M²Γ²] × (2J+1)/((2s₁+1)(2s₂+1)), where M is the resonance mass, Γ is the total width, Γ_i and Γ_f are partial widths for initial and final states, J is the resonance spin, and s₁,s₂ are initial particle spins."
+  },
+  {
+    "id": "eq_luminosity",
+    "category": "equations",
+    "text": "Instantaneous luminosity: L = n₁n₂f/(4πσ_xσ_y), where n₁,n₂ are particles per bunch, f is the collision frequency, σ_x,σ_y are transverse beam sizes. Integrated luminosity: L_int = ∫L dt. The number of events is N = σ × L_int. LHC Run 2 delivered ~140 fb⁻¹ per experiment at √s = 13 TeV."
+  },
+  {
+    "id": "detector_atlas",
+    "category": "detectors",
+    "text": "ATLAS detector at the LHC: inner detector (silicon pixels + strips + TRT) for tracking in 2T solenoid field, electromagnetic calorimeter (liquid argon + lead absorber, |η|<3.2), hadronic calorimeter (steel/scintillator tile barrel + LAr endcap), muon spectrometer (toroid magnets, MDT chambers). Pseudorapidity coverage |η|<4.9 for calorimetry."
+  },
+  {
+    "id": "detector_cms",
+    "category": "detectors",
+    "text": "CMS detector at the LHC: all-silicon tracker (pixel + strips) in 3.8T solenoid, PbWO₄ crystal electromagnetic calorimeter (76,000 crystals), brass/scintillator hadronic calorimeter, iron/gas muon chambers. CMS uses a compact design with the solenoid encompassing tracker + calorimeters."
+  },
+  {
+    "id": "detector_calorimetry",
+    "category": "detectors",
+    "text": "Electromagnetic calorimeter energy resolution: σ_E/E = a/√E ⊕ b/E ⊕ c, where a is the stochastic term (~10%/√E for sampling, ~2-3%/√E for homogeneous), b is the noise term, c is the constant term (~0.5-1%). Hadronic calorimeter resolution is typically 50-100%/√E due to invisible energy (nuclear binding, neutrinos)."
+  },
+  {
+    "id": "sim_monte_carlo",
+    "category": "simulation",
+    "text": "Monte Carlo event generators for HEP: Pythia 8 for general-purpose pp/ee event generation including parton showers and hadronization. MadGraph5_aMC@NLO for NLO matrix element calculations. Sherpa for multi-leg NLO merged predictions. Herwig 7 for angular-ordered parton shower. POWHEG for NLO matching."
+  },
+  {
+    "id": "sim_geant4",
+    "category": "simulation",
+    "text": "Geant4 is used for full detector simulation in HEP. It simulates particle transport through matter including electromagnetic showers, hadronic interactions, multiple scattering, and energy loss. Typical CPU time: 1-10 minutes per pp event at the LHC. GPU acceleration via Celeritas (EM physics, 3-10× speedup) and Opticks (optical photon transport, 50-200× speedup)."
+  },
+  {
+    "id": "sim_delphes",
+    "category": "simulation",
+    "text": "Delphes is a fast detector simulation framework. It parameterizes detector response using efficiency functions, energy smearing, and jet clustering rather than full Geant4 simulation. Processing time: ~0.1s per event (1000× faster than Geant4). Includes modules for tracking, calorimetry, b-tagging, and tau-tagging."
+  },
+  {
+    "id": "analysis_jet",
+    "category": "analysis",
+    "text": "Jet algorithms: anti-kT (standard at LHC, produces circular jets), Cambridge-Aachen (angular-ordered), kT (soft particles clustered first). Typical jet radius R=0.4 for resolved jets, R=1.0 for boosted objects. Jet energy scale uncertainty at ATLAS/CMS: 1-3% for central jets. b-jet identification efficiency: ~70-80% with light-jet rejection ~100-1000."
+  },
+  {
+    "id": "analysis_statistics",
+    "category": "analysis",
+    "text": "Statistical methods in HEP: the profile likelihood ratio test statistic q_μ = -2ln(L(μ,θ̂_μ)/L(μ̂,θ̂)) where μ is the signal strength and θ are nuisance parameters. Discovery significance: p-value < 2.87×10⁻⁷ (5σ). Exclusion limits set at 95% CL using CLs method. Asymptotic approximations valid for large datasets."
+  },
+  {
+    "id": "sm_lagrangian",
+    "category": "theory",
+    "text": "The Standard Model Lagrangian: L = L_gauge + L_fermion + L_Higgs + L_Yukawa. The gauge sector is SU(3)_C × SU(2)_L × U(1)_Y with 12 gauge bosons (8 gluons, W±, Z, γ). Electroweak symmetry breaking via the Higgs mechanism gives masses to W±, Z, and fermions while leaving the photon massless."
+  },
+  {
+    "id": "sm_ckm",
+    "category": "theory",
+    "text": "The CKM matrix parametrizes quark flavor mixing: V_CKM = [[V_ud V_us V_ub],[V_cd V_cs V_cb],[V_td V_ts V_tb]]. Key values: |V_ud|=0.97373, |V_us|=0.2243, |V_ub|=0.00382, |V_cb|=0.0408. CP violation in the quark sector is characterized by the Jarlskog invariant J ≈ 3.18 × 10⁻⁵."
+  },
+  {
+    "id": "bsm_susy",
+    "category": "theory",
+    "text": "Supersymmetry (SUSY) predicts a superpartner for each SM particle differing by spin-1/2. Current LHC limits: gluino mass > 2.3 TeV, squark mass > 1.8 TeV (simplified models). No SUSY particles discovered as of 2025. The MSSM has 105 free parameters reduced to ~20 in constrained models (cMSSM, pMSSM)."
+  },
+  {
+    "id": "unit_conversions",
+    "category": "constants",
+    "text": "Unit conversions in particle physics: 1 GeV = 1.602×10⁻¹⁰ J. ℏc = 197.327 MeV·fm. 1 barn = 10⁻²⁴ cm² = 10⁻²⁸ m². 1 fb⁻¹ = 10¹⁵ b⁻¹ = 10³⁹ cm⁻². Conversion factor: Γ(GeV) × τ(s) = ℏ = 6.582×10⁻²⁵ GeV·s. Natural units: c = ℏ = 1, [mass] = [energy] = [momentum] = GeV."
+  },
+  {
+    "id": "cosmo_parameters",
+    "category": "cosmology",
+    "text": "Cosmological parameters (Planck 2018): Hubble constant H₀ = 67.4 ± 0.5 km/s/Mpc. Matter density Ω_m = 0.315. Dark energy density Ω_Λ = 0.685. Baryon density Ω_b = 0.0493. CMB temperature T₀ = 2.7255 K. Age of the universe t₀ = 13.787 ± 0.020 Gyr."
+  },
+  {
+    "id": "nuclear_binding",
+    "category": "nuclear",
+    "text": "Nuclear binding energy per nucleon peaks at Fe-56 (~8.79 MeV/nucleon). The semi-empirical mass formula: B(A,Z) = a_V×A - a_S×A^(2/3) - a_C×Z(Z-1)/A^(1/3) - a_A×(A-2Z)²/A + δ(A,Z). Typical values: a_V≈15.56 MeV, a_S≈17.23 MeV, a_C≈0.697 MeV, a_A≈23.29 MeV."
+  },
+  {
+    "id": "qcd_confinement",
+    "category": "theory",
+    "text": "QCD confinement: quarks and gluons cannot be isolated as free particles. The QCD string tension is σ ≈ 1 GeV/fm ≈ 0.18 GeV². Hadronization models: Lund string fragmentation (Pythia), cluster hadronization (Herwig). The deconfinement temperature T_c ≈ 155 MeV corresponds to the quark-gluon plasma phase transition."
+  }
+]
