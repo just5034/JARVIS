@@ -35,7 +35,7 @@ fi
 conda activate "$ENV_NAME"
 
 # Install JARVIS with serving deps
-cd "$HOME/jarvis"
+cd "$HOME/JARVIS"
 pip install -e ".[serving,dev]" --quiet
 
 # --- Model setup ---
