@@ -101,17 +101,23 @@ python scripts/quantize.py --model /models/qwen-32b --format nvfp4 --output /mod
 
 ## Memory Configurations
 
-### Configuration A: Maximum Specialist Coverage
+### Configuration A: Two Bases + Math LoRA (Default)
 
-Uses shared Qwen-32B base for all three core brains (math, physics, code) with LoRA adapters. Maximizes free memory for specialists.
+Both physics and code bases always resident. Math uses a LoRA adapter on the physics base (R1-Distill-Qwen-32B). Maximizes specialist headroom.
 
 ```yaml
 # configs/deployment.yaml
 deployment:
-  config: "max_specialists"
-  math_brain: "qwen-32b-math-lora"    # LoRA on shared base
-  physics_brain: "qwen-32b-physics-lora"
-  code_brain: "qwen-32b-code-lora"
+  config: "dual_base"
+  physics_brain:
+    base: "r1-distill-qwen-32b"    # Qwen2.5 architecture
+    adapter: "physics_general"       # or "physics_hep"
+  code_brain:
+    base: "qwen3-32b"               # Qwen3 architecture — NOT compatible with physics adapters
+    adapter: "code_general"          # or "code_hep"
+  math_brain:
+    base: "r1-distill-qwen-32b"    # Shares physics base, different LoRA
+    adapter: "math_adapter"
 
 memory_budget:
   total_gb: 128
@@ -120,53 +126,55 @@ memory_budget:
   available_gb: 111
 
   always_resident:
-    qwen_32b_base: 16.0
+    r1_distill_qwen_32b: 16.0       # Physics + math base
+    qwen3_32b: 16.0                  # Code base
     router: 0.06
     think_prm: 0.8
     draft_model: 0.8
     rag_index: 5.0
-    active_lora: 0.3
-    total: 22.96
+    active_lora: 0.3                 # One adapter loaded at a time per base
+    total: 38.96
 
-  available_for_specialists: 88.04
+  available_for_specialists: 72.04   # Room for ~20 specialist 7B models
 
 context_window:
-  kv_cache_dtype: "fp8"              # FP8 by default — 2× reduction, negligible quality loss
-  kv_quant_bits_hard: 2              # 2-bit KVQuant for hard queries — 8× reduction
-  ssd_offload_enabled: true          # Page inactive KV entries to 4TB NVMe
-  ssd_offload_path: "/tmp/kv_cache"  # Node-local SSD
-  max_model_len: 65536               # vLLM --max-model-len (architecture supports 128K)
-  # Effective context limits per difficulty:
-  #   Easy (1 pass, FP8):           128K tokens
-  #   Medium (best-of-4, FP8):      64K tokens
-  #   Hard (best-of-16, 2-bit KV):  64K tokens
-  #   Hard (best-of-16, FP8):       32K tokens
-  #   Derivation (1 pass + offload): 128K+ tokens
+  kv_cache_dtype: "fp8"
+  kv_quant_bits_hard: 2
+  ssd_offload_enabled: true
+  ssd_offload_path: "/tmp/kv_cache"
+  max_model_len: 65536
 ```
 
-### Configuration B: Maximum Math Performance
+### Configuration B: Two Bases + Separate 70B Math Brain
 
-Uses separate R1-Distill-Llama-70B for math brain. Specialists load on demand from SSD.
+Maximum math performance. R1-Distill-Llama-70B loaded alongside both 32B bases. Specialists load on demand from SSD.
 
 ```yaml
 deployment:
-  config: "max_math"
-  math_brain: "r1-distill-llama-70b"
-  physics_brain: "qwen-32b-physics-lora"
-  code_brain: "qwen-32b-code-lora"
+  config: "dual_base_max_math"
+  physics_brain:
+    base: "r1-distill-qwen-32b"
+    adapter: "physics_general"
+  code_brain:
+    base: "qwen3-32b"
+    adapter: "code_general"
+  math_brain:
+    base: "r1-distill-llama-70b"   # Separate 70B — Llama 3.3 architecture
+    adapter: null                    # Off-the-shelf, no adapter
 
 memory_budget:
   always_resident:
-    qwen_32b_base: 16.0
+    r1_distill_qwen_32b: 16.0
+    qwen3_32b: 16.0
     r1_distill_70b: 35.0
     router: 0.06
     think_prm: 0.8
     draft_model: 0.8
     rag_index: 5.0
     active_lora: 0.3
-    total: 57.96
+    total: 73.96
 
-  available_for_specialists: 53.04
+  available_for_specialists: 37.04   # Tight — room for ~10 specialist 7B models
 ```
 
 ---

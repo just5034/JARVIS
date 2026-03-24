@@ -11,7 +11,7 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 | Field | Value |
 |-------|-------|
 | **Primary** | `deepseek-ai/DeepSeek-R1-Distill-Llama-70B` |
-| **Fallback** | `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` (shared base + math LoRA) |
+| **Fallback** | `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` (math LoRA on physics base) |
 | **Parameters** | 70B (primary) / 32B (fallback) |
 | **FP4 Size** | ~35 GB (primary) / ~16 GB shared + 0.3 GB LoRA (fallback) |
 | **Source** | [HuggingFace](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B) |
@@ -27,7 +27,7 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 | **Base** | `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` |
 | **Adapter** | Custom LoRA trained on Delta (physics_general + physics_hep) |
 | **Parameters** | 32B base + LoRA adapters |
-| **FP4 Size** | ~16 GB (shared base) + 0.3 GB (adapter) |
+| **FP4 Size** | ~16 GB (Qwen2.5 base, always resident) + 0.3 GB (adapter) |
 | **Source** | Base: [HuggingFace](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B) |
 | **License** | MIT (base model) |
 | **Training** | ~4,200 SU on Delta — distillation SFT + GRPO RL + ETTRL |
@@ -41,14 +41,14 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 | **Base** | `Qwen/Qwen3-32B` |
 | **Adapter** | Custom LoRA trained on Delta (code_general + code_hep) |
 | **Parameters** | 32B base + LoRA adapters |
-| **FP4 Size** | ~16 GB (shared base) + 0.3 GB (adapter) |
+| **FP4 Size** | ~16 GB (Qwen3 base, always resident) + 0.3 GB (adapter) |
 | **Source** | Base: [HuggingFace](https://huggingface.co/Qwen/Qwen3-32B) |
 | **License** | Apache 2.0 |
 | **Training** | ~2,800 SU on Delta — AZR self-play RL + targeted SFT |
 | **Baseline** | LiveCodeBench: ~45% |
 | **Target** | LiveCodeBench: 65-72% |
 
-**Note on shared base:** If physics and code brains use the same Qwen-32B architecture family, they can share a single base model in memory with only LoRA adapters swapping. Verify architecture compatibility — R1-Distill-Qwen-32B is Qwen2.5 architecture, Qwen3-32B is Qwen3 architecture. If architectures differ, two separate bases are needed (~32 GB total instead of ~16 GB). Investigate whether physics brain can be trained on Qwen3-32B instead of R1-Distill-Qwen-32B to enable base sharing.
+**RESOLVED: Two separate bases.** Physics uses R1-Distill-Qwen-32B (Qwen2.5 architecture) and Code uses Qwen3-32B (Qwen3 architecture). These are architecturally incompatible — different attention implementations, tokenizers, and layer structures. LoRA adapters trained on one base CANNOT be loaded onto the other. Both bases are always resident in memory (~32 GB total at FP4). The math brain uses a LoRA adapter on the physics base (R1-Distill-Qwen-32B), or optionally the separate R1-Distill-Llama-70B for maximum math performance.
 
 ---
 

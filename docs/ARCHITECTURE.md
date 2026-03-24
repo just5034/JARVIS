@@ -84,7 +84,7 @@ JARVIS is a routed ensemble inference system. It is composed of five major subsy
 
 **Memory Model:**
 ```yaml
-# Always resident (core system ~34 GB at FP4)
+# Always resident (core system ~50 GB at FP4)
 permanent:
   - router: 0.06 GB
   - think_prm: 0.8 GB          # ThinkPRM 1.5B verifier
@@ -92,17 +92,27 @@ permanent:
   - rag_index: 5.0 GB           # FAISS physics knowledge base
   - framework_overhead: 10.0 GB  # vLLM/TensorRT-LLM + OS
 
-# Swappable (loaded based on routing decisions)
-swappable:
-  base_models:
-    - qwen_32b: 16.0 GB         # Shared base for physics/code/math adapters
-    - r1_distill_70b: 35.0 GB   # Math brain (if using 70B config)
-  lora_adapters:                  # Hot-swap in milliseconds
+# Two separate base models (~32 GB total at FP4)
+# R1-Distill-Qwen-32B = Qwen2.5 architecture (physics + math adapters)
+# Qwen3-32B = Qwen3 architecture (code adapters)
+# These are NOT interchangeable — different architectures, different tokenizers
+base_models:
+  - r1_distill_qwen_32b: 16.0 GB   # Physics brain base (+ optional math LoRA)
+  - qwen3_32b: 16.0 GB              # Code brain base
+
+# Swappable LoRA adapters (hot-swap in milliseconds, WITHIN same base only)
+lora_adapters:
+  on_r1_distill_qwen_32b:           # Only compatible with R1-Distill-Qwen-32B
     - physics_general: 0.3 GB
     - physics_hep: 0.3 GB
+    - math_adapter: 0.3 GB           # Optional — if using 32B math instead of 70B
+  on_qwen3_32b:                      # Only compatible with Qwen3-32B
     - code_general: 0.3 GB
     - code_hep: 0.3 GB
-    - math_adapter: 0.3 GB       # Only if using 32B math config
+
+# Optional: separate math brain (loads INSTEAD of using math LoRA on R1-Distill)
+optional_base:
+  - r1_distill_70b: 35.0 GB   # Math brain — only load if max math performance needed
 
 # On-demand specialists (loaded from SSD, 5-10 seconds)
 specialists:
@@ -112,13 +122,18 @@ specialists:
   - biomistral_7b: 3.5 GB
 ```
 
-**Adapter Swapping Logic:**
-1. Check if requested domain's adapter is already active → proceed immediately
-2. If different adapter needed on same base model → unload current adapter, load new one (milliseconds)
-3. If different base model needed → check memory budget → unload old base if necessary → load new base from SSD
-4. If specialist model needed → check if already resident → if not, load from SSD, optionally evicting least-recently-used specialist
+**Two-base architecture rationale:** R1-Distill-Qwen-32B (Qwen2.5) carries R1's reasoning chain distillation — critical for physics. Qwen3-32B has stronger code capabilities for AZR self-play training. The architectures are incompatible (different attention, tokenizers, layer structure), so LoRA adapters cannot be shared across them. The cost is ~32 GB for two bases instead of ~16 GB for one, but the DGX Spark's 128 GB accommodates this comfortably.
 
-**Memory Tracking:** Maintain a real-time ledger of loaded models and their memory footprints. Refuse to load a model if it would exceed the 128GB budget minus a 5GB safety margin.
+**Adapter Swapping Logic:**
+1. Router determines domain → identifies which base model is needed
+2. If the correct base is already loaded and the right adapter is active → proceed immediately
+3. If correct base is loaded but wrong adapter → swap LoRA adapter (milliseconds, within same base only)
+4. If different base is needed (e.g., switching from physics to code) → both bases are always resident, just activate the other base's inference endpoint. No loading delay.
+5. If specialist model needed → check if already resident → if not, load from SSD, optionally evicting least-recently-used specialist
+
+**⚠️ Cross-base adapter constraint:** Physics LoRA adapters (trained on R1-Distill-Qwen-32B / Qwen2.5) CANNOT be loaded onto Qwen3-32B, and vice versa. The Brain Manager must enforce this — attempting to load an incompatible adapter should raise an error, not silently produce garbage.
+
+**Memory Tracking:** Maintain a real-time ledger of loaded models and their memory footprints. Refuse to load a model if it would exceed the 128GB budget minus a 5GB safety margin. With two bases always resident (~50 GB core), approximately 73 GB remains for the 70B math brain, specialists, and KV cache.
 
 ### 4. Inference Engine (`src/inference/`)
 

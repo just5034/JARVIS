@@ -34,7 +34,9 @@ GRACE (HEP Agent) ──HTTP──▶ JARVIS API (localhost:8000)
 ## Key Technical Decisions
 
 - **Deployment target:** NVIDIA DGX Spark (128GB unified RAM, GB10 Blackwell, $4,699)
-- **Base model for physics + code brains:** R1-Distill-Qwen-32B (shared base, LoRA adapters swap per domain)
+- **Physics brain base:** R1-Distill-Qwen-32B (Qwen2.5 architecture, 62.1% GPQA baseline, R1 reasoning distillation)
+- **Code brain base:** Qwen3-32B (Qwen3 architecture, stronger code baseline for AZR self-play)
+- **Two separate bases (~32 GB total at FP4).** Different architectures — LoRA adapters are NOT cross-compatible. Each brain loads its own base model.
 - **Math brain:** R1-Distill-Llama-70B (off-shelf, no training) or R1-Distill-Qwen-32B with math LoRA (if memory-constrained)
 - **Router:** Lightweight BERT classifier (~110M params), two-stage: domain → difficulty
 - **Specialist models:** Standalone 7B models (ChemLLM, BioMistral, ESM3-open, Evo 2) loaded from SSD on demand

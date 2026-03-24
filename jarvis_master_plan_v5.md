@@ -332,7 +332,7 @@ Use R1-Distill-Qwen-1.5B as a draft model to accelerate inference 2-3×. This en
 | RAG (already planned) | N/A — replaces context | Retrieval quality dependent | FAISS, §3.3 |
 | Context compression | 3-10× on conversation history | Lossy on detail | Software summarization pass |
 
-**Practical context limits on DGX Spark (Config A: ~94 GB available):**
+**Practical context limits on DGX Spark (Config A: ~66 GB available after core system + specialists):**
 
 | Difficulty | Sampling | KV Config | Max Context |
 |-----------|----------|-----------|-------------|
@@ -527,7 +527,7 @@ These open-source specialized models have been identified as deployable within J
 2. **The most impressive specialized models are NOT text LLMs.** ESM3, Evo 2, and GenCast operate on entirely different data modalities with specialized tokenization — proteins, DNA, atmospheric data.
 3. **Continued pretraining + instruction tuning + alignment is the standard recipe** for text-based domain adaptation. SaulLM, BioMistral, ChemLLM, and FinGPT all follow this pattern — validating our physics/code brain training pipeline.
 4. **LoRA/QLoRA makes domain adaptation accessible.** FinGPT demonstrated useful financial models for ~$300 via LoRA. This validates the JARVIS approach of LoRA adapters for HEP specialization.
-5. **The shared-base-with-adapter strategy scales best for deployment.** If physics and code brains share the Qwen-32B base, adding chemistry/biology/legal adapters costs <1GB each with millisecond swap times.
+5. **The LoRA adapter strategy scales deployment.** Adding new domain specializations (chemistry, biology, legal) within the same architecture family costs <1GB per adapter with millisecond swap times. New domains on different architectures require loading a separate base model (~16GB each, 5-10 seconds from SSD). JARVIS uses two bases (Qwen2.5 for physics/math, Qwen3 for code) — future specialists would attach to whichever base best fits their domain.
 
 ---
 
@@ -560,46 +560,46 @@ These open-source specialized models have been identified as deployable within J
 
 | Component | FP4 Size | Notes |
 |-----------|----------|-------|
-| Qwen-32B base (shared by physics + code) | ~16 GB | Single base, LoRA adapters swap |
-| Physics LoRA adapter | ~0.3 GB | Hot-swap in milliseconds |
-| Code LoRA adapter | ~0.3 GB | Hot-swap in milliseconds |
-| HEP physics LoRA adapter | ~0.3 GB | Hot-swap in milliseconds |
-| HEP code LoRA adapter | ~0.3 GB | Hot-swap in milliseconds |
+| R1-Distill-Qwen-32B (physics/math base) | ~16 GB | Qwen2.5 architecture — physics + math LoRA adapters |
+| Qwen3-32B (code base) | ~16 GB | Qwen3 architecture — code LoRA adapters |
+| Active LoRA adapter(s) | ~0.3-0.6 GB | Hot-swap within same base in milliseconds |
 | Router classifier | ~0.1 GB | Always loaded |
 | ThinkPRM verifier | ~0.8 GB | Always loaded |
 | Draft model (speculative decoding) | ~0.8 GB | Always loaded |
 | FAISS RAG index + overhead | ~5 GB | Always loaded |
 | OS + framework overhead | ~10 GB | DGX OS + vLLM/TensorRT-LLM |
-| **Subtotal (core system)** | **~34 GB** | |
+| **Subtotal (core system)** | **~50 GB** | |
 
-**Remaining headroom: ~94 GB** — available for the math brain and specialist models.
+**Remaining headroom: ~78 GB** — available for the 70B math brain and specialist models.
 
-**Configuration A: Maximum specialist coverage (math brain = 32B LoRA on shared base)**
+**⚠️ Two separate bases:** R1-Distill-Qwen-32B and Qwen3-32B are architecturally incompatible (different attention, tokenizers, layer structure). LoRA adapters trained on one CANNOT be loaded onto the other. Both are always resident. This costs ~32 GB instead of ~16 GB for a shared base, but preserves each brain's optimal starting architecture.
 
-Drop R1-Distill-Llama-70B; use the shared Qwen-32B base with a math LoRA adapter instead. Trades ~5-10% math performance for massive headroom.
+**Configuration A: Two bases + math LoRA (default)**
+
+Math uses a LoRA adapter on the physics base (R1-Distill-Qwen-32B). Maximizes specialist headroom.
 
 | Additional Component | FP4 Size |
 |---------------------|----------|
-| Math LoRA adapter | ~0.3 GB |
+| Math LoRA adapter (on physics base) | ~0.3 GB |
 | ESM3-open (proteins) | ~0.7 GB |
 | Evo 2 7B (genomics) | ~3.5 GB |
 | ChemLLM-7B (chemistry) | ~3.5 GB |
 | BioMistral-7B (biomedicine) | ~3.5 GB |
-| **Total system** | **~46 GB** |
-| **Remaining** | **~82 GB** |
+| **Total system** | **~62 GB** |
+| **Remaining** | **~66 GB** |
 
-All specialists loaded simultaneously. 82GB free for future models.
+All specialists loaded simultaneously. 66GB free for future models and KV cache.
 
-**Configuration B: Maximum math performance (math brain = R1-Distill-Llama-70B)**
+**Configuration B: Two bases + separate 70B math brain**
 
 | Additional Component | FP4 Size |
 |---------------------|----------|
 | R1-Distill-Llama-70B (math) | ~35 GB |
 | Specialists loaded on demand from SSD | 0 (stored on 4TB SSD) |
-| **Total system** | **~69 GB** |
-| **Remaining** | **~59 GB** |
+| **Total system** | **~85 GB** |
+| **Remaining** | **~43 GB** |
 
-Math brain always resident. Specialist models swap in/out from SSD in 5-10 seconds each.
+Math brain always resident alongside both 32B bases. Specialist models swap in/out from SSD in 5-10 seconds each. 43GB remaining is sufficient for ~12 specialist 7B models or KV cache headroom.
 
 **What does NOT fit: R1-0528 (685B MoE)** requires ~342 GB at FP4. Exceeds even a 4-unit DGX Spark cluster (512GB when accounting for framework overhead). Math brain must use a distilled variant for local deployment.
 
@@ -723,3 +723,4 @@ All corrections from previous iterations are retained (see Appendix C of franken
 30. **Context window limited by KV cache, not just architecture:** R1-Distill-Qwen-32B architecturally supports 128K (Qwen2.5 with YaRN), but DeepSeek only validated up to 32K. Without KV cache optimization, parallel best-of-16 at 32K costs ~64GB of KV cache (FP16), capping practical context. With FP8 KV (vLLM default flag), this halves. With 2-bit KVQuant, parallel best-of-16 at 64K becomes feasible. SSD offload enables 128K+ for single-stream derivations.
 31. **"128K physics derivations" was misleading:** The v4 claim of "up to 128K" for physics derivations was only achievable with single-pass inference. With best-of-N amplification, the practical ceiling was 32K without KV cache optimization. Now corrected: 128K is achievable with FP8 KV + SSD offload for single pass, or with 2-bit KVQuant for parallel best-of-16 at 64K.
 32. **KV cache optimization techniques added to free techniques table:** FP8 KV cache, 2-bit KVQuant, SSD offload, and context compression added as zero-cost inference techniques. These collectively extend JARVIS's effective context by 6-8× with negligible quality impact.
+33. **Two-base architecture resolved:** Physics brain uses R1-Distill-Qwen-32B (Qwen2.5) and code brain uses Qwen3-32B (Qwen3). Architecturally incompatible — adapters cannot be shared across bases. Both bases always resident (~32 GB total at FP4 vs ~16 GB for a hypothetical shared base). Core system footprint increased from ~34 GB to ~50 GB. Config A available headroom: ~66 GB. Config B available headroom: ~43 GB. Both sufficient for deployment.
