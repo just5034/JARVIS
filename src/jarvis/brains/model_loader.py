@@ -179,9 +179,11 @@ def load_model(
     logger.info("Loading model '%s' from %s", model_key, model_path)
     start = time.monotonic()
 
-    quantization = config.quantization if config.quantization != "nvfp4" else None
-    # nvfp4 requires Blackwell hardware — on non-Blackwell, load without quantization
-    # and let vLLM handle dtype automatically
+    # Map quantization config to vLLM-compatible value
+    # "nvfp4" requires Blackwell hardware, "none" means no quantization
+    quantization = config.quantization
+    if quantization in ("nvfp4", "none", ""):
+        quantization = None
 
     llm = LLM(
         model=model_path,
