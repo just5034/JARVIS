@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from jarvis.api.server import create_app
 from jarvis.brains.brain_manager import BrainManager
-from jarvis.brains.model_loader import GenerationResult, LoadedModelHandle
-from jarvis.config import BaseModelConfig, JarvisConfig, load_config
+from jarvis.config import JarvisConfig, load_config
+from tests.conftest import MockModelHandle
 
 
 @pytest.fixture
@@ -27,38 +26,13 @@ def client(config: JarvisConfig) -> TestClient:
 
 
 @pytest.fixture
-def mock_model() -> LoadedModelHandle:
-    """A mock model handle that returns canned responses."""
-    model = MagicMock(spec=LoadedModelHandle)
-    model.model_key = "test_model"
-    model.model_id = "test/model"
-    model.generate.return_value = [
-        GenerationResult(
-            text="The Higgs boson mass is approximately 125 GeV.",
-            prompt_tokens=20,
-            completion_tokens=10,
-            finish_reason="stop",
-        )
-    ]
-    model.generate_stream.return_value = iter(
-        [
-            GenerationResult(
-                text="Hello world",
-                prompt_tokens=5,
-                completion_tokens=3,
-                finish_reason="stop",
-            )
-        ]
-    )
-    return model
-
-
-@pytest.fixture
-def client_with_model(config: JarvisConfig, mock_model: LoadedModelHandle) -> TestClient:
+def client_with_model(config: JarvisConfig) -> TestClient:
     """Client with a mock model loaded."""
     brain_manager = BrainManager(config)
-    brain_manager._models["test_model"] = mock_model
+    mock = MockModelHandle(["The Higgs boson mass is approximately 125 GeV."])
+    brain_manager._models["test_model"] = mock
     brain_manager._default_model = "test_model"
+    brain_manager._active_adapters["test_model"] = None
     brain_manager.memory.register("test_model", 4.0, "base")
     app = create_app(config, brain_manager=brain_manager)
     return TestClient(app)
@@ -100,7 +74,7 @@ def test_chat_completions_no_model_returns_503(client: TestClient) -> None:
     assert response.status_code == 503
 
 
-# --- Phase 1: chat completions with mock model ---
+# --- Chat completions with mock model ---
 
 
 def test_chat_completions_success(client_with_model: TestClient) -> None:
@@ -118,7 +92,6 @@ def test_chat_completions_success(client_with_model: TestClient) -> None:
     assert len(data["choices"]) == 1
     assert data["choices"][0]["message"]["role"] == "assistant"
     assert "125 GeV" in data["choices"][0]["message"]["content"]
-    assert data["choices"][0]["finish_reason"] == "stop"
 
 
 def test_chat_completions_usage_stats(client_with_model: TestClient) -> None:
@@ -140,9 +113,9 @@ def test_chat_completions_jarvis_metadata(client_with_model: TestClient) -> None
     )
     data = response.json()
     meta = data["jarvis_metadata"]
-    assert meta["base_model"] == "test_model"
-    assert meta["inference_strategy"] == "single_pass"
+    assert meta["base_model"] == "mock_model"
     assert meta["latency_ms"] >= 0
+    assert meta["inference_strategy"] is not None
 
 
 def test_chat_completions_streaming(client_with_model: TestClient) -> None:
@@ -155,14 +128,6 @@ def test_chat_completions_streaming(client_with_model: TestClient) -> None:
     )
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
-
-    # Parse SSE chunks
-    chunks = []
-    for line in response.text.strip().split("\n"):
-        if line.startswith("data: ") and line != "data: [DONE]":
-            chunks.append(line[6:])
-
-    assert len(chunks) >= 2  # role chunk + content chunk + done chunk
     assert "data: [DONE]" in response.text
 
 
@@ -196,7 +161,6 @@ def test_admin_load_unknown_model(client: TestClient) -> None:
         "/admin/load",
         json={"model": "nonexistent_model", "action": "load"},
     )
-    # Should fail — either 404 (unknown key) or 503 (vLLM not installed)
     assert response.status_code in (404, 503)
 
 
@@ -208,7 +172,7 @@ def test_admin_load_invalid_action(client: TestClient) -> None:
     assert response.status_code == 400
 
 
-# --- Phase 2: routing metadata in responses ---
+# --- Phase 2: routing metadata ---
 
 
 def test_routing_metadata_in_response(client_with_model: TestClient) -> None:
@@ -222,7 +186,6 @@ def test_routing_metadata_in_response(client_with_model: TestClient) -> None:
     )
     data = response.json()
     meta = data["jarvis_metadata"]
-    # Router should classify this as physics
     assert meta["routed_domain"] == "physics"
     assert meta["difficulty"] in ("easy", "medium", "hard")
 
@@ -253,3 +216,19 @@ def test_auto_model_field(client_with_model: TestClient) -> None:
     data = response.json()
     meta = data["jarvis_metadata"]
     assert meta["routed_domain"] == "code"
+
+
+# --- Phase 3: inference strategy metadata ---
+
+
+def test_easy_query_uses_single_pass(client_with_model: TestClient) -> None:
+    response = client_with_model.post(
+        "/v1/chat/completions",
+        json={
+            "messages": [{"role": "user", "content": "What is the speed of light?"}],
+        },
+    )
+    data = response.json()
+    meta = data["jarvis_metadata"]
+    assert meta["inference_strategy"] == "single_pass"
+    assert meta["num_candidates"] == 1

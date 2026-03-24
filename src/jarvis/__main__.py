@@ -39,6 +39,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
     port = args.port or config.deployment.server.port
 
     from jarvis.brains.brain_manager import BrainManager
+    from jarvis.inference.engine import InferenceEngine
     from jarvis.router.router import Router
 
     brain_manager = BrainManager(config)
@@ -47,6 +48,10 @@ def cmd_serve(args: argparse.Namespace) -> None:
     query_router = Router(config)
     query_router.load()
     logger.info("Router initialized (domain + difficulty classification)")
+
+    # Initialize inference engine
+    inference_engine = InferenceEngine(config.inference)
+    logger.info("Inference engine initialized (difficulty-aware amplification)")
 
     # Auto-load models at startup if specified
     if args.load_model:
@@ -58,7 +63,12 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
     from jarvis.api.server import create_app
 
-    app = create_app(config, brain_manager=brain_manager, query_router=query_router)
+    app = create_app(
+        config,
+        brain_manager=brain_manager,
+        query_router=query_router,
+        inference_engine=inference_engine,
+    )
 
     import uvicorn
 

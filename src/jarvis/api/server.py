@@ -10,6 +10,7 @@ from jarvis import __version__
 from jarvis.api.routes import router, set_state
 from jarvis.brains.brain_manager import BrainManager
 from jarvis.config import JarvisConfig
+from jarvis.inference.engine import InferenceEngine
 from jarvis.router.router import Router
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ def create_app(
     config: JarvisConfig,
     brain_manager: BrainManager | None = None,
     query_router: Router | None = None,
+    inference_engine: InferenceEngine | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="JARVIS",
@@ -33,7 +35,10 @@ def create_app(
         query_router = Router(config)
         query_router.load()
 
-    set_state(config, brain_manager, query_router)
+    if inference_engine is None:
+        inference_engine = InferenceEngine(config.inference)
+
+    set_state(config, brain_manager, query_router, inference_engine)
     app.include_router(router)
 
     return app

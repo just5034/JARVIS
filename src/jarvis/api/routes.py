@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -31,6 +32,7 @@ from jarvis.api.models import (
 from jarvis.brains.brain_manager import BrainManager
 from jarvis.brains.model_loader import GenerationRequest
 from jarvis.config import JarvisConfig
+from jarvis.inference.engine import InferenceEngine
 from jarvis.router.router import Router
 
 logger = logging.getLogger(__name__)
@@ -39,17 +41,20 @@ router = APIRouter()
 _config: JarvisConfig | None = None
 _brain_manager: BrainManager | None = None
 _router: Router | None = None
+_engine: InferenceEngine | None = None
 
 
 def set_state(
     config: JarvisConfig,
     brain_manager: BrainManager,
     query_router: Router | None = None,
+    inference_engine: InferenceEngine | None = None,
 ) -> None:
-    global _config, _brain_manager, _router
+    global _config, _brain_manager, _router, _engine
     _config = config
     _brain_manager = brain_manager
     _router = query_router
+    _engine = inference_engine
 
 
 def _get_config() -> JarvisConfig:
@@ -66,6 +71,10 @@ def _get_brains() -> BrainManager:
 
 def _get_router() -> Router | None:
     return _router
+
+
+def _get_engine() -> InferenceEngine | None:
+    return _engine
 
 
 @router.get("/health")
@@ -94,6 +103,8 @@ async def list_models() -> ModelListResponse:
 async def chat_completions(request: ChatCompletionRequest):
     brains = _get_brains()
     query_router = _get_router()
+    engine = _get_engine()
+    config = _get_config()
     start_time = time.monotonic()
 
     if not brains.has_models:
@@ -126,7 +137,7 @@ async def chat_completions(request: ChatCompletionRequest):
         if model is None:
             raise HTTPException(status_code=503, detail="No models available")
 
-    # Build generation request
+    # Build message dicts
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
 
     stop: list[str] | None = None
@@ -135,6 +146,71 @@ async def chat_completions(request: ChatCompletionRequest):
     elif isinstance(request.stop, list):
         stop = request.stop
 
+    # Streaming bypasses the inference engine (single_pass only)
+    if request.stream:
+        return _stream_response(model, messages, request, stop, start_time, routing_decision)
+
+    # Non-streaming: use inference engine if available
+    difficulty = routing_decision.difficulty if routing_decision else "easy"
+    domain = routing_decision.domain if routing_decision else "general"
+
+    if engine is not None:
+        # Get timeout from difficulty config
+        level_config = config.inference.difficulty_levels.get(difficulty)
+        timeout = level_config.timeout_seconds if level_config else 30
+
+        try:
+            result = await asyncio.wait_for(
+                engine.generate(
+                    model=model,
+                    messages=messages,
+                    difficulty=difficulty,
+                    domain=domain,
+                    temperature=request.temperature,
+                    top_p=request.top_p,
+                    max_tokens=request.max_tokens or 2048,
+                    stop=stop,
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail=f"Inference timed out after {timeout}s for difficulty '{difficulty}'",
+            )
+        except Exception as e:
+            logger.error("Inference engine failed: %s", e)
+            raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
+
+        elapsed_ms = (time.monotonic() - start_time) * 1000
+
+        return ChatCompletionResponse(
+            model=model.model_key,
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=result.text),
+                    finish_reason=result.finish_reason,
+                )
+            ],
+            usage=Usage(
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.completion_tokens,
+                total_tokens=result.prompt_tokens + result.completion_tokens,
+            ),
+            jarvis_metadata=JarvisMetadata(
+                routed_domain=domain,
+                difficulty=difficulty,
+                inference_strategy=result.strategy,
+                num_candidates=result.num_candidates,
+                verification_score=result.verification_score,
+                base_model=model.model_key,
+                adapter=routing_decision.adapter if routing_decision else None,
+                latency_ms=round(elapsed_ms, 1),
+            ),
+        )
+
+    # Fallback: direct generation (no engine)
     gen_request = GenerationRequest(
         messages=messages,
         temperature=request.temperature,
@@ -144,10 +220,6 @@ async def chat_completions(request: ChatCompletionRequest):
         n=request.n,
     )
 
-    if request.stream:
-        return _stream_response(model, gen_request, start_time, routing_decision)
-
-    # Non-streaming: generate and return full response
     try:
         results = model.generate(gen_request)
     except Exception as e:
@@ -155,44 +227,37 @@ async def chat_completions(request: ChatCompletionRequest):
         raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
 
     elapsed_ms = (time.monotonic() - start_time) * 1000
-
-    choices = []
-    for i, result in enumerate(results):
-        choices.append(
-            Choice(
-                index=i,
-                message=ChatMessage(role="assistant", content=result.text),
-                finish_reason=result.finish_reason,
-            )
-        )
-
     first = results[0]
-    usage = Usage(
-        prompt_tokens=first.prompt_tokens,
-        completion_tokens=first.completion_tokens,
-        total_tokens=first.prompt_tokens + first.completion_tokens,
-    )
-
-    metadata = JarvisMetadata(
-        routed_domain=routing_decision.domain if routing_decision else None,
-        difficulty=routing_decision.difficulty if routing_decision else None,
-        inference_strategy="single_pass",
-        num_candidates=request.n,
-        base_model=model.model_key,
-        adapter=routing_decision.adapter if routing_decision else None,
-        latency_ms=round(elapsed_ms, 1),
-    )
 
     return ChatCompletionResponse(
         model=model.model_key,
-        choices=choices,
-        usage=usage,
-        jarvis_metadata=metadata,
+        choices=[
+            Choice(
+                index=i,
+                message=ChatMessage(role="assistant", content=r.text),
+                finish_reason=r.finish_reason,
+            )
+            for i, r in enumerate(results)
+        ],
+        usage=Usage(
+            prompt_tokens=first.prompt_tokens,
+            completion_tokens=first.completion_tokens,
+            total_tokens=first.prompt_tokens + first.completion_tokens,
+        ),
+        jarvis_metadata=JarvisMetadata(
+            routed_domain=domain,
+            difficulty=difficulty,
+            inference_strategy="single_pass",
+            num_candidates=request.n,
+            base_model=model.model_key,
+            adapter=routing_decision.adapter if routing_decision else None,
+            latency_ms=round(elapsed_ms, 1),
+        ),
     )
 
 
-def _stream_response(model, gen_request, start_time, routing_decision=None):
-    """Return an SSE streaming response."""
+def _stream_response(model, messages, request, stop, start_time, routing_decision):
+    """Return an SSE streaming response. Always uses single_pass."""
 
     async def event_generator():
         chunk_id = f"chatcmpl-{int(time.time())}"
@@ -211,6 +276,15 @@ def _stream_response(model, gen_request, start_time, routing_decision=None):
             ],
         )
         yield f"data: {first_chunk.model_dump_json()}\n\n"
+
+        gen_request = GenerationRequest(
+            messages=messages,
+            temperature=request.temperature,
+            top_p=request.top_p,
+            max_tokens=request.max_tokens or 2048,
+            stop=stop,
+            n=1,
+        )
 
         try:
             for result in model.generate_stream(gen_request):
@@ -281,7 +355,6 @@ async def admin_load(request: AdminLoadRequest) -> AdminLoadResponse:
 
     if request.action == "load":
         try:
-            start = time.monotonic()
             brains.load_base_model(request.model, set_default=True)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
