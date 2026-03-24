@@ -15,6 +15,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
 #SBATCH --time=00:30:00
+#SBATCH --exclusive
 #SBATCH --output=logs/jarvis-test-%j.out
 #SBATCH --error=logs/jarvis-test-%j.err
 
