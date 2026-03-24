@@ -83,6 +83,11 @@ jarvis/
     └── benchmark.sh           # Run full evaluation suite
 ```
 
+## Git & Commit Rules
+
+- **No AI co-authorship lines.** Never add `Co-Authored-By` or any similar attribution to Claude, Anthropic, or any AI in commits.
+- **No AI signatures or branding** in commit messages, PR descriptions, code comments, or any generated content.
+
 ## Development Principles
 
 1. **Modular everything.** Each brain, the router, the inference engine, and each specialist are independent components with clean interfaces. Adding a new specialist should require zero changes to existing code.
