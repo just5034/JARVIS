@@ -48,9 +48,38 @@ export JARVIS_MODEL_DIR=/tmp/jarvis_models
 TEST_CONFIG_DIR="/tmp/jarvis_test_configs"
 mkdir -p "$TEST_CONFIG_DIR"
 
-# Copy base configs
+# Copy base inference config
 cp configs/inference.yaml "$TEST_CONFIG_DIR/"
-cp configs/router.yaml "$TEST_CONFIG_DIR/"
+
+# Override router.yaml — point all domains to the test model
+cat > "$TEST_CONFIG_DIR/router.yaml" << 'YAML'
+domain_classifier:
+  model: "bert-base-uncased"
+  checkpoint_path: "/models/infrastructure/router/domain_classifier"
+  domains:
+    - general
+  confidence_threshold: 0.6
+  fallback_domain: "general"
+
+difficulty_estimator:
+  model: "bert-base-uncased"
+  checkpoint_path: "/models/infrastructure/router/difficulty_estimator"
+  levels:
+    - easy
+    - medium
+    - hard
+  default_level: "medium"
+
+hep_subdomain:
+  enabled: false
+  method: "keyword_plus_classifier"
+  keywords: []
+
+domain_to_brain:
+  general:
+    base_model: "qwen2_5_7b"
+    adapter: null
+YAML
 
 # Override models.yaml with a small test model
 cat > "$TEST_CONFIG_DIR/models.yaml" << 'YAML'
