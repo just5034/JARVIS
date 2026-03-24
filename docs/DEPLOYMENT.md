@@ -129,6 +129,19 @@ memory_budget:
     total: 22.96
 
   available_for_specialists: 88.04
+
+context_window:
+  kv_cache_dtype: "fp8"              # FP8 by default — 2× reduction, negligible quality loss
+  kv_quant_bits_hard: 2              # 2-bit KVQuant for hard queries — 8× reduction
+  ssd_offload_enabled: true          # Page inactive KV entries to 4TB NVMe
+  ssd_offload_path: "/tmp/kv_cache"  # Node-local SSD
+  max_model_len: 65536               # vLLM --max-model-len (architecture supports 128K)
+  # Effective context limits per difficulty:
+  #   Easy (1 pass, FP8):           128K tokens
+  #   Medium (best-of-4, FP8):      64K tokens
+  #   Hard (best-of-16, 2-bit KV):  64K tokens
+  #   Hard (best-of-16, FP8):       32K tokens
+  #   Derivation (1 pass + offload): 128K+ tokens
 ```
 
 ### Configuration B: Maximum Math Performance

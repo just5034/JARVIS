@@ -80,6 +80,9 @@ The primary inference endpoint. OpenAI-compatible.
     "candidates_generated": 4,
     "verification_score": 0.92,
     "rag_passages_retrieved": 2,
+    "context_tokens_used": 8432,
+    "kv_cache_dtype": "fp8",
+    "kv_cache_gb": 2.1,
     "time_ms": 8432
   }
 }
@@ -161,6 +164,16 @@ System health and status.
     "requests_active": 2,
     "avg_latency_ms": 3200,
     "model_swaps_total": 23
+  },
+  "context": {
+    "kv_cache_dtype": "fp8",
+    "kv_quant_bits": 8,
+    "ssd_offload_enabled": false,
+    "max_context_single_pass": 131072,
+    "max_context_best_of_4": 65536,
+    "max_context_best_of_16": 32768,
+    "kv_cache_used_gb": 4.2,
+    "kv_cache_available_gb": 48.6
   }
 }
 ```

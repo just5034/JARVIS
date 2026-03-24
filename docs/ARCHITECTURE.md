@@ -144,11 +144,62 @@ specialists:
 
 **f) S\* Code Verification** — For code brain hard queries only. Generate 16 candidates → generate distinguishing test inputs → execute all candidates → select by correct behavior. Requires sandboxed Python executor.
 
-**g) Extended Thinking Budgets:**
+**g) Context Window & KV Cache Management:**
+
+The context window is constrained by both model architecture and available RAM for KV cache storage. Without optimization, the KV cache is the dominant memory consumer for long-context inference.
+
+**Model architecture limits:**
+
+| Model | Architecture Context | Recommended Max |
+|-------|---------------------|----------------|
+| R1-Distill-Qwen-32B | 128K (Qwen2.5 with YaRN) | 32K (DeepSeek validated) |
+| R1-Distill-Llama-70B | 128K (Llama 3.3) | 32K (DeepSeek validated) |
+| Qwen3-32B | 32K default, 128K with YaRN | 32K |
+| 7B specialists | Varies (most 32K-128K) | 32K |
+
+**KV cache memory cost (32B model, 8 KV heads, 128 dim/head, 64 layers):**
+
+| Context Length | FP16 KV | FP8 KV | 2-bit KV (KVQuant) |
+|---------------|---------|--------|-------------------|
+| 8K | ~2 GB | ~1 GB | ~0.25 GB |
+| 16K | ~4 GB | ~2 GB | ~0.5 GB |
+| 32K | ~8 GB | ~4 GB | ~1 GB |
+| 64K | ~16 GB | ~8 GB | ~2 GB |
+| 128K | ~32 GB | ~16 GB | ~4 GB |
+
+**KV cache optimization techniques (applied in inference config):**
+
+1. **FP8 KV cache quantization** — vLLM native (`kv_cache_dtype="fp8"`). 2× memory reduction, negligible quality loss. **Enabled by default.**
+
+2. **Sub-4-bit KV quantization (KVQuant / AQUA-KV)** — 6-8× memory reduction at <1% perplexity degradation. Requires one-time calibration (~1-6 hours). Available via llm-compressor. **Recommended for hard queries requiring parallel best-of-N at long context.**
+
+3. **KV cache offloading to SSD** — Pages inactive KV cache entries to the 4TB NVMe SSD. Trades small latency (~ms per layer lookup) for effectively unlimited single-stream context. Supported by KVSwap and emerging vLLM features. **Recommended for physics derivations requiring 128K context.**
+
+4. **KV cache eviction (StreamingLLM / H2O)** — Maintains a rolling window of recent tokens + attention sinks. Fixed-size KV cache for arbitrarily long sequences. Trades mid-context recall for infinite streaming. **Use for multi-turn conversations, not single-query reasoning.**
+
+5. **RAG as context replacement** — Instead of loading large documents into context, retrieve relevant passages via FAISS and prepend only those. Converts 200K-token documents into 2K-token retrievals. **Already in the JARVIS plan for physics knowledge.**
+
+6. **Context compression** — Periodically summarize older conversation history to reclaim context space. **Use for long GRACE workflows spanning many queries.**
+
+**Practical context limits on DGX Spark (128GB RAM, ~94GB available after core system):**
+
+| Difficulty | Sampling | KV Cache Config | Max Context | KV Memory |
+|-----------|----------|----------------|-------------|-----------|
+| Easy | 1 pass | FP8 | 128K | ~16 GB |
+| Medium | best-of-4 parallel | FP8 | 64K | ~32 GB (4 × 8 GB) |
+| Hard | best-of-16 parallel | FP8 | 32K | ~64 GB (16 × 4 GB) |
+| Hard | best-of-16 parallel | 2-bit KV | 64K | ~32 GB (16 × 2 GB) |
+| Hard | best-of-16 parallel | 2-bit KV | 128K | ~64 GB (16 × 4 GB) |
+| Hard | best-of-16 sequential | FP8 | 128K | ~16 GB (reuse slot) |
+| Derivation | 1 pass + SSD offload | FP8 + offload | 128K+ | ~5 GB active + SSD |
+
+**Default configuration:** FP8 KV cache enabled globally. 2-bit KVQuant enabled for hard queries. SSD offload available for physics derivation mode.
+
+**h) Extended Thinking Budgets:**
 - Easy: 4K tokens
 - Medium: 16K tokens
 - Hard: 32-64K tokens
-- Physics derivations: up to 128K (full context window)
+- Physics derivations: up to 128K (with FP8 KV + SSD offload)
 
 ### 5. Specialist Registry (`src/specialists/`)
 

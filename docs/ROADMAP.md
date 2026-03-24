@@ -97,6 +97,13 @@
   - Sandboxed Python executor (Docker container)
   - Generate distinguishing test inputs
   - Execute candidates, select by correct behavior
+- [ ] Implement `src/inference/context_manager.py` — KV cache management
+  - Enable FP8 KV cache quantization by default (`kv_cache_dtype="fp8"`)
+  - Integrate KVQuant/AQUA-KV for 2-bit KV on hard queries (run one-time calibration)
+  - Configure SSD offload path for KV cache pages (`/tmp/kv_cache` on DGX Spark NVMe)
+  - Track KV cache memory usage per active inference
+  - Dynamically select context limits based on difficulty level and sampling strategy
+  - Implement context compression for long multi-turn GRACE workflows
 - [ ] Wire difficulty level from router → inference engine strategy selection
 - [ ] Configurable via `configs/inference.yaml`
 

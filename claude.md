@@ -58,6 +58,7 @@ jarvis/
 │   ├── router/                # Domain + difficulty classification
 │   ├── brains/                # Brain management, LoRA loading, model configs
 │   ├── inference/             # Amplification engine (best-of-N, verification, etc.)
+│   │                          # Includes context_manager.py for KV cache optimization
 │   ├── specialists/           # Specialist model registry and on-demand loading
 │   ├── api/                   # FastAPI server, OpenAI-compatible endpoints
 │   └── rag/                   # FAISS knowledge base for physics
