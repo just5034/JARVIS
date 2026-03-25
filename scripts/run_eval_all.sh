@@ -16,7 +16,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=120G
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
 #SBATCH --output=/scratch/bgde/jhill5/logs/eval-%j.out
@@ -129,7 +129,8 @@ if $RUN_CODE; then
         --output "$EVAL_OUT/livecode_$(date +%Y%m%d).json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
-        --experiment "code_eval"
+        --experiment "code_eval" \
+        --max-tokens 4096
     echo ""
 fi
 
