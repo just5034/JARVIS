@@ -33,7 +33,28 @@ def download_gpqa(output_dir: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     print("[download] GPQA Diamond...")
-    ds = load_dataset("Idavidrein/gpqa", "gpqa_diamond", split="train")
+    # Try ungated source first, then gated original
+    ds = None
+    for repo in ["openai/gpqa", "Idavidrein/gpqa"]:
+        for config in ["gpqa_diamond", "diamond", None]:
+            try:
+                kwargs = {"split": "train", "trust_remote_code": True}
+                if config:
+                    ds = load_dataset(repo, config, **kwargs)
+                else:
+                    ds = load_dataset(repo, **kwargs)
+                print(f"  loaded from {repo}" + (f" config={config}" if config else ""))
+                break
+            except Exception:
+                continue
+        if ds is not None:
+            break
+
+    if ds is None:
+        print("  ERROR: GPQA requires HuggingFace authentication.")
+        print("  Run: huggingface-cli login")
+        print("  Then accept access at: https://huggingface.co/datasets/Idavidrein/gpqa")
+        return 0
 
     problems = []
     for row in ds:
@@ -126,10 +147,25 @@ def download_livecode(output_dir: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     print("[download] LiveCodeBench...")
-    try:
-        ds = load_dataset("livecodebench/code_generation_lite", split="test")
-    except Exception:
-        ds = load_dataset("livecodebench/code_generation_lite", split="train")
+    ds = None
+    # Try multiple sources — trust_remote_code needed for dataset scripts
+    sources = [
+        ("livecodebench/code_generation_lite", "test"),
+        ("livecodebench/code_generation_lite", "train"),
+        ("livecodebench/livecodebench", "test"),
+    ]
+    for repo, split in sources:
+        try:
+            ds = load_dataset(repo, split=split, trust_remote_code=True)
+            print(f"  loaded from {repo} split={split}")
+            break
+        except Exception:
+            continue
+
+    if ds is None:
+        print("  ERROR: could not load LiveCodeBench")
+        print("  Try: pip install datasets --upgrade")
+        return 0
 
     problems = []
     for row in ds:
