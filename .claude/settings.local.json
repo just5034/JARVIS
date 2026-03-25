@@ -18,7 +18,11 @@
       "Bash(find /c/Users/joon4/OneDrive/Documents/GitHub/JARVIS/tests -type f -name \"*.py\" -exec wc -l {} +)",
       "Bash(cd:*)",
       "Bash(python -m pytest tests/ -q --tb=short)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(curl -s https://huggingface.co/api/datasets/livecodebench/code_generation_lite)",
+      "Bash(python -m json.tool)",
+      "WebSearch",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

@@ -6,7 +6,7 @@ Target: >= 87% for math brain (off-shelf + inference amplification)
 
 Usage:
     python -m training.eval.run_aime \
-        --model /projects/bgde-delta-gpu/models/r1-distill-qwen-32b \
+        --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
         --output /scratch/bgde/jhill5/eval/aime_2024.json
 """
 

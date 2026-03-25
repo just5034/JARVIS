@@ -20,7 +20,7 @@ Usage:
     python -m training.data.generate_router_data \
         --output /scratch/bgde/jhill5/data/router_training_with_difficulty.jsonl \
         --add-difficulty \
-        --model /projects/bgde-delta-gpu/models/r1-distill-qwen-32b \
+        --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
         --input /scratch/bgde/jhill5/data/router_training.jsonl
 """
 

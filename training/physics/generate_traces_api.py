@@ -16,7 +16,7 @@ Usage:
     python -m training.physics.generate_traces_api \
         --problems /scratch/bgde/jhill5/data/physics_problems.jsonl \
         --output /scratch/bgde/jhill5/data/physics_traces/ \
-        --model /projects/bgde-delta-gpu/models/r1-distill-qwen-32b \
+        --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
         --api-base http://localhost:8000/v1 \
         --traces-per-problem 8
 """

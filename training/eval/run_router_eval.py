@@ -7,7 +7,7 @@ Metrics:
 
 Usage:
     python -m training.eval.run_router_eval \
-        --router-model /projects/bgde-delta-gpu/models/router_bert \
+        --router-model /projects/bgde/jhill5/models/router_bert \
         --data-dir /scratch/bgde/jhill5/data/benchmarks \
         --output /scratch/bgde/jhill5/eval/router.json
 """

@@ -6,8 +6,8 @@ Target: >= 78% for physics brain
 
 Usage:
     python -m training.eval.run_gpqa \
-        --model /projects/bgde-delta-gpu/models/r1-distill-qwen-32b \
-        --adapter /projects/bgde-delta-gpu/adapters/physics_general \
+        --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
+        --adapter /projects/bgde/jhill5/adapters/physics_general \
         --output /scratch/bgde/jhill5/eval/gpqa_diamond.json
 """
 

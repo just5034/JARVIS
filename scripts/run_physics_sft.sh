@@ -40,7 +40,7 @@ export TMPDIR=/tmp
 export HF_HOME=/tmp/hf_cache
 
 # ─── Paths ───
-BASE_MODEL="/projects/bgde-delta-gpu/models/r1-distill-qwen-32b"
+BASE_MODEL="/projects/bgde/jhill5/models/r1-distill-qwen-32b"
 TRAIN_DATA="/scratch/bgde/jhill5/data/physics_filtered_100k.jsonl"
 OUTPUT_DIR="/scratch/bgde/jhill5/checkpoints/physics_sft"
 TB_LOGS="/scratch/bgde/jhill5/tb_logs"

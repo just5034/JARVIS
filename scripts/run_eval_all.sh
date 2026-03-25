@@ -41,8 +41,8 @@ export HF_HOME=/tmp/hf_cache
 export TMPDIR=/tmp
 
 # ─── Paths ───
-MODELS="/projects/bgde-delta-gpu/models"
-ADAPTERS="/projects/bgde-delta-gpu/adapters"
+MODELS="/projects/bgde/jhill5/models"
+ADAPTERS="/projects/bgde/jhill5/adapters"
 DATA="/scratch/bgde/jhill5/data/benchmarks"
 EVAL_OUT="/scratch/bgde/jhill5/eval"
 TB_LOGS="/scratch/bgde/jhill5/tb_logs"
