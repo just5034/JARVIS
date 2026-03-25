@@ -145,36 +145,93 @@ def download_aime(output_dir: Path) -> int:
 
 
 def download_livecode(output_dir: Path) -> int:
-    """Download LiveCodeBench from HuggingFace."""
-    from datasets import load_dataset
+    """Download LiveCodeBench from HuggingFace or direct parquet files.
 
+    The livecodebench/code_generation_lite dataset uses a Python loading
+    script which datasets v4 no longer supports. We download the raw
+    parquet files directly via the HuggingFace API instead.
+    """
     out = output_dir / "livecode"
     out.mkdir(parents=True, exist_ok=True)
 
     print("[download] LiveCodeBench...")
     ds = None
-    # Try multiple repos and splits
-    sources = [
+
+    # Method 1: Try loading directly (works if dataset has parquet format)
+    direct_sources = [
         ("livecodebench/livecodebench", "test"),
         ("livecodebench/livecodebench", "train"),
-        ("livecodebench/code_generation_lite", "test"),
-        ("livecodebench/code_generation_lite", "train"),
     ]
-    last_err = None
-    for repo, split in sources:
+    for repo, split in direct_sources:
         try:
+            from datasets import load_dataset
+
             ds = load_dataset(repo, split=split)
             print(f"  loaded from {repo} split={split}")
             break
-        except Exception as e:
-            last_err = e
+        except Exception:
             continue
 
+    # Method 2: Download parquet files directly from the HuggingFace API
     if ds is None:
-        print(f"  ERROR: could not load LiveCodeBench: {last_err}")
-        print("  Dataset may use unsupported loading scripts.")
-        print("  You can manually download from: https://livecodebench.github.io/")
-        return 0
+        try:
+            import urllib.request
+
+            base_url = "https://huggingface.co/api/datasets/livecodebench/code_generation_lite/parquet"
+            print("  trying direct parquet download...")
+            # Try to list and download parquet files
+            req = urllib.request.Request(base_url)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                parquet_info = json.loads(resp.read())
+                # Download first available split
+                for split_name, files in parquet_info.items():
+                    if files:
+                        parquet_url = files[0]
+                        parquet_path = out / "data.parquet"
+                        urllib.request.urlretrieve(parquet_url, str(parquet_path))
+                        import pandas as pd
+
+                        df = pd.read_parquet(parquet_path)
+                        print(f"  loaded {len(df)} rows from parquet ({split_name})")
+                        # Convert to list of dicts
+                        ds = df.to_dict("records")
+                        break
+        except Exception as e:
+            print(f"  parquet download failed: {e}")
+
+    # Method 3: Use HumanEval as fallback code benchmark
+    if ds is None:
+        try:
+            from datasets import load_dataset
+
+            ds = load_dataset("openai/openai_humaneval", split="test")
+            print("  LiveCodeBench unavailable — using HumanEval as code benchmark fallback")
+            # HumanEval has different column names, normalize them
+            problems = []
+            for row in ds:
+                problems.append({
+                    "id": row["task_id"],
+                    "title": row["task_id"],
+                    "description": row["prompt"],
+                    "difficulty": "medium",
+                    "input_format": "",
+                    "output_format": "",
+                    "constraints": "",
+                    "test_cases": [],
+                    "canonical_solution": row.get("canonical_solution", ""),
+                    "entry_point": row.get("entry_point", ""),
+                    "test_code": row.get("test", ""),
+                })
+
+            with open(out / "livecode_bench.jsonl", "w") as f:
+                for p in problems:
+                    f.write(json.dumps(p) + "\n")
+
+            print(f"  → {len(problems)} problems saved (HumanEval fallback)")
+            return len(problems)
+        except Exception as e:
+            print(f"  HumanEval fallback also failed: {e}")
+            return 0
 
     problems = []
     for row in ds:
