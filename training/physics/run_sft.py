@@ -54,10 +54,6 @@ class DataArguments:
     val_split: float = field(default=0.02, metadata={"help": "Fraction for validation"})
 
 
-@dataclass
-class AimArguments:
-    aim_repo: str = field(default="/scratch/bgde-delta-gpu/aim", metadata={"help": "Aim repo"})
-    aim_experiment: str = field(default="sft", metadata={"help": "Aim experiment name"})
 
 
 class TraceDataset(Dataset):
@@ -134,8 +130,8 @@ class TraceDataset(Dataset):
 
 
 def main():
-    parser = HfArgumentParser((ModelArguments, DataArguments, TrainingArguments, AimArguments))
-    model_args, data_args, training_args, aim_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
@@ -176,18 +172,8 @@ def main():
         full_dataset, [train_size, val_size]
     )
 
-    # Aim callback
-    callbacks = []
-    try:
-        from training.utils.tracking import get_aim_callback
-        aim_cb = get_aim_callback(
-            experiment=aim_args.aim_experiment,
-            aim_repo=aim_args.aim_repo,
-        )
-        if aim_cb:
-            callbacks.append(aim_cb)
-    except ImportError:
-        print("[sft] aim not available — metrics logged to tensorboard only")
+    # HuggingFace Trainer logs to TensorBoard automatically when logging_dir is set.
+    # Just set --logging_dir in TrainingArguments (via SLURM script).
 
     # Train
     trainer = Trainer(

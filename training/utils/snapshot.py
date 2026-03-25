@@ -1,8 +1,7 @@
 """Generate a structured training progress snapshot for review.
 
-Reads Aim repo and eval results to produce a concise JSON/text summary
-that can be shared with Claude for analysis. This gives more structured
-output than the bash script.
+Reads TensorBoard logs and eval results to produce a concise JSON/text
+summary that can be shared with Claude for analysis.
 
 Usage:
     # Print summary to terminal (copy-paste into Claude):
@@ -24,42 +23,70 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def get_aim_summary(aim_repo: str) -> dict:
-    """Extract latest metrics from all Aim experiments."""
+def get_tb_summary(log_dir: str) -> dict:
+    """Extract latest metrics from TensorBoard event files."""
     summary = {}
+    log_path = Path(log_dir)
+    if not log_path.exists():
+        return {"_error": f"log dir not found: {log_dir}"}
+
     try:
-        from aim import Repo
-
-        repo = Repo(aim_repo)
-        for run in repo.iter_runs():
-            exp = run.experiment or "default"
-            if exp not in summary:
-                summary[exp] = {
-                    "run_hash": run.hash,
-                    "created": str(run.created_at),
-                    "tags": list(run.tags) if run.tags else [],
-                    "hparams": dict(run.get("hparams", {})) if run.get("hparams") else {},
-                    "metrics": {},
-                }
-
-            # Get latest value for each tracked metric
-            for metric in run.metrics():
-                name = metric.name
-                values = list(metric.values)
-                if values:
-                    last_step, last_val = values[-1]
-                    summary[exp]["metrics"][name] = {
-                        "latest": last_val,
-                        "step": last_step,
-                        "n_points": len(values),
-                    }
-                    # Include first value for computing deltas
-                    if len(values) > 1:
-                        summary[exp]["metrics"][name]["first"] = values[0][1]
+        from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
     except ImportError:
-        summary["_error"] = "aim not installed"
-    except Exception as e:
-        summary["_error"] = str(e)
+        # Fallback: read meta.json files we write alongside TB events
+        for exp_dir in sorted(log_path.iterdir()):
+            if exp_dir.is_dir():
+                meta_file = exp_dir / "meta.json"
+                if meta_file.exists():
+                    meta = json.loads(meta_file.read_text())
+                    summary[exp_dir.name] = {
+                        "started_at": meta.get("started_at", "?"),
+                        "hparams": meta.get("hparams", {}),
+                        "metrics": {},
+                        "_note": "install tensorboard for full metric extraction",
+                    }
+        if not summary:
+            summary["_error"] = "tensorboard not installed and no meta.json found"
+        return summary
+
+    for exp_dir in sorted(log_path.iterdir()):
+        if not exp_dir.is_dir():
+            continue
+
+        # Find the event file (could be in subdirectory)
+        event_files = list(exp_dir.rglob("events.out.tfevents.*"))
+        if not event_files:
+            continue
+
+        ea = EventAccumulator(str(exp_dir))
+        ea.Reload()
+
+        exp_data = {
+            "experiment": exp_dir.name,
+            "metrics": {},
+        }
+
+        # Read meta.json if available
+        meta_file = exp_dir / "meta.json"
+        if meta_file.exists():
+            meta = json.loads(meta_file.read_text())
+            exp_data["started_at"] = meta.get("started_at", "?")
+            exp_data["hparams"] = meta.get("hparams", {})
+
+        for tag in ea.Tags().get("scalars", []):
+            events = ea.Scalars(tag)
+            if events:
+                last = events[-1]
+                first = events[0]
+                exp_data["metrics"][tag] = {
+                    "latest": last.value,
+                    "step": last.step,
+                    "n_points": len(events),
+                }
+                if len(events) > 1:
+                    exp_data["metrics"][tag]["first"] = first.value
+
+        summary[exp_dir.name] = exp_data
 
     return summary
 
@@ -111,12 +138,14 @@ def format_text(snapshot: dict) -> str:
     lines.append("=" * 60)
     lines.append("")
 
-    # Aim experiments
-    aim = snapshot.get("aim_experiments", {})
-    if aim and "_error" not in aim:
+    # TensorBoard experiments
+    tb = snapshot.get("tb_experiments", {})
+    if tb and "_error" not in tb:
         lines.append("TRAINING RUNS:")
-        for exp_name, exp_data in aim.items():
-            lines.append(f"  [{exp_name}] (run: {exp_data.get('run_hash', '?')[:8]})")
+        for exp_name, exp_data in tb.items():
+            lines.append(f"  [{exp_name}]")
+            if "started_at" in exp_data:
+                lines.append(f"    started: {exp_data['started_at']}")
             metrics = exp_data.get("metrics", {})
             for metric_name, metric_data in metrics.items():
                 latest = metric_data.get("latest", "?")
@@ -128,15 +157,14 @@ def format_text(snapshot: dict) -> str:
                     delta_str = f" (delta: {delta:+.4f})"
                 lines.append(f"    {metric_name}: {latest} @ step {step}{delta_str}")
             lines.append("")
-    elif "_error" in aim:
-        lines.append(f"TRAINING RUNS: {aim['_error']}")
+    elif "_error" in tb:
+        lines.append(f"TRAINING RUNS: {tb['_error']}")
         lines.append("")
 
     # Eval results
     evals = snapshot.get("eval_results", {})
     if evals and "_error" not in evals:
         lines.append("EVAL RESULTS:")
-        # Define targets for comparison
         targets = {
             "gpqa": ("accuracy", 0.78),
             "aime": ("accuracy", 0.87),
@@ -146,7 +174,6 @@ def format_text(snapshot: dict) -> str:
             metrics = data.get("metrics", {})
             lines.append(f"  [{name}]")
             for k, v in metrics.items():
-                # Check against targets
                 target_str = ""
                 for tgt_name, (tgt_metric, tgt_val) in targets.items():
                     if tgt_name in name and k == tgt_metric:
@@ -173,7 +200,7 @@ def format_text(snapshot: dict) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Generate training progress snapshot")
     parser.add_argument(
-        "--aim-repo", default="/scratch/bgde-delta-gpu/aim", help="Aim repo path"
+        "--log-dir", default="/scratch/bgde-delta-gpu/tb_logs", help="TensorBoard log directory"
     )
     parser.add_argument(
         "--eval-dir", default="/scratch/bgde-delta-gpu/eval", help="Eval results directory"
@@ -191,7 +218,7 @@ def main():
 
     snapshot = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "aim_experiments": get_aim_summary(args.aim_repo),
+        "tb_experiments": get_tb_summary(args.log_dir),
         "eval_results": get_eval_results(args.eval_dir),
         "checkpoints": get_checkpoint_info(args.checkpoint_dir),
     }

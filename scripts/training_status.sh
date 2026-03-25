@@ -25,7 +25,7 @@ SCRATCH="/scratch/bgde-delta-gpu"
 LOGS="$SCRATCH/logs"
 EVAL="$SCRATCH/eval"
 CHECKPOINTS="$SCRATCH/checkpoints"
-AIM_REPO="$SCRATCH/aim"
+TB_LOGS="$SCRATCH/tb_logs"
 REPO_DIR="/u/jhill5/jarvis"
 
 SAVE_MODE=false

@@ -34,7 +34,6 @@ training = [
     "datasets>=3.0.0",
     "peft>=0.14.0",
     "accelerate>=1.2.0",
-    "aim>=3.25.0",
     "tensorboard>=2.18.0",
 ]
 dev = [

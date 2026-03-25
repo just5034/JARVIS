@@ -22,12 +22,12 @@ def make_arg_parser(benchmark_name: str) -> argparse.ArgumentParser:
         help="Path to save results JSON (e.g., /scratch/.../eval/gpqa.json)",
     )
     parser.add_argument(
-        "--aim-repo",
-        default="/scratch/bgde-delta-gpu/aim",
-        help="Aim repo path for metric tracking",
+        "--log-dir",
+        default="/scratch/bgde-delta-gpu/tb_logs",
+        help="TensorBoard log directory for metric tracking",
     )
     parser.add_argument(
-        "--experiment", default=benchmark_name, help="Aim experiment name"
+        "--experiment", default=benchmark_name, help="Experiment name for TensorBoard"
     )
     parser.add_argument(
         "--data-dir",

@@ -43,7 +43,7 @@ export HF_HOME=/tmp/hf_cache
 BASE_MODEL="/projects/bgde-delta-gpu/models/r1-distill-qwen-32b"
 TRAIN_DATA="/scratch/bgde-delta-gpu/data/physics_filtered_100k.jsonl"
 OUTPUT_DIR="/scratch/bgde-delta-gpu/checkpoints/physics_sft"
-AIM_REPO="/scratch/bgde-delta-gpu/aim"
+TB_LOGS="/scratch/bgde-delta-gpu/tb_logs"
 
 echo "=== JARVIS Physics SFT (Phase 4B) ==="
 echo "Job ID:     $SLURM_JOB_ID"
@@ -97,8 +97,7 @@ deepspeed --num_gpus=4 -m training.physics.run_sft \
     --bf16 true \
     --save_strategy epoch \
     --logging_steps 10 \
-    --aim_repo "$AIM_REPO" \
-    --aim_experiment "physics_sft"
+    --logging_dir "$TB_LOGS/physics_sft"
 
 echo ""
 echo "=== SFT Complete ==="
@@ -112,7 +111,7 @@ python -m training.eval.run_gpqa \
     --adapter "$OUTPUT_DIR/final" \
     --output "/scratch/bgde-delta-gpu/eval/gpqa_post_sft_$(date +%Y%m%d).json" \
     --data-dir "/scratch/bgde-delta-gpu/data/benchmarks" \
-    --aim-repo "$AIM_REPO" \
+    --log-dir "$TB_LOGS" \
     --experiment "physics_sft"
 
 echo "=== Phase 4B Done ==="

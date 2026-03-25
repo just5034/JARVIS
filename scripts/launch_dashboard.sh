@@ -1,33 +1,29 @@
 #!/usr/bin/env bash
-# Launch Aim dashboard for monitoring JARVIS training on Delta.
+# Launch TensorBoard dashboard for monitoring JARVIS training on Delta.
 #
 # Usage (on Delta login node):
 #   bash scripts/launch_dashboard.sh
 #
 # Then on your LOCAL machine, open the SSH tunnel:
-#   ssh -L 43800:localhost:43800 jhill5@login.delta.ncsa.illinois.edu
+#   ssh -L 6006:localhost:6006 jhill5@login.delta.ncsa.illinois.edu
 #
-# Then open http://localhost:43800 in your browser.
+# Then open http://localhost:6006 in your browser.
 
 set -euo pipefail
 
-AIM_REPO="${AIM_REPO:-/scratch/bgde-delta-gpu/aim}"
-PORT="${AIM_PORT:-43800}"
+LOG_DIR="${TB_LOG_DIR:-/scratch/bgde-delta-gpu/tb_logs}"
+PORT="${TB_PORT:-6006}"
 
-echo "=== JARVIS Training Dashboard (Aim) ==="
+echo "=== JARVIS Training Dashboard (TensorBoard) ==="
 echo ""
-echo "Aim repo: ${AIM_REPO}"
-echo "Port:     ${PORT}"
+echo "Log dir: ${LOG_DIR}"
+echo "Port:    ${PORT}"
 echo ""
 
-# Initialize repo if it doesn't exist
-if [ ! -d "${AIM_REPO}/.aim" ]; then
-    echo "Initializing Aim repo at ${AIM_REPO} ..."
-    mkdir -p "${AIM_REPO}"
-    aim init --repo "${AIM_REPO}"
-fi
+# Create log dir if it doesn't exist
+mkdir -p "${LOG_DIR}"
 
-echo "Starting Aim dashboard..."
+echo "Starting TensorBoard..."
 echo ""
 echo "============================================"
 echo "  On your LOCAL machine, run:"
@@ -38,4 +34,4 @@ echo "  Then open: http://localhost:${PORT}"
 echo "============================================"
 echo ""
 
-aim up --repo "${AIM_REPO}" --host 0.0.0.0 --port "${PORT}"
+tensorboard --logdir "${LOG_DIR}" --host 0.0.0.0 --port "${PORT}"

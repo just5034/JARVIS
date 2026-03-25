@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run ALL benchmark evaluations on Delta.
-# Evaluates physics, math, code brains and router, logging to Aim.
+# Evaluates physics, math, code brains and router, logging to TensorBoard.
 #
 # Usage:
 #   sbatch scripts/run_eval_all.sh
@@ -45,9 +45,9 @@ MODELS="/projects/bgde-delta-gpu/models"
 ADAPTERS="/projects/bgde-delta-gpu/adapters"
 DATA="/scratch/bgde-delta-gpu/data/benchmarks"
 EVAL_OUT="/scratch/bgde-delta-gpu/eval"
-AIM_REPO="/scratch/bgde-delta-gpu/aim"
+TB_LOGS="/scratch/bgde-delta-gpu/tb_logs"
 
-mkdir -p "$EVAL_OUT" "$AIM_REPO"
+mkdir -p "$EVAL_OUT" "$TB_LOGS"
 
 # ─── Download benchmarks if needed ───
 if [ ! -f "$DATA/manifest.json" ]; then
@@ -93,7 +93,7 @@ if $RUN_PHYSICS; then
         $ADAPTER_FLAG \
         --output "$EVAL_OUT/gpqa_diamond_$(date +%Y%m%d).json" \
         --data-dir "$DATA" \
-        --aim-repo "$AIM_REPO" \
+        --log-dir "$TB_LOGS" \
         --experiment "physics_eval"
     echo ""
 fi
@@ -107,7 +107,7 @@ if $RUN_MATH; then
         --model "$MATH_MODEL" \
         --output "$EVAL_OUT/aime_2024_$(date +%Y%m%d).json" \
         --data-dir "$DATA" \
-        --aim-repo "$AIM_REPO" \
+        --log-dir "$TB_LOGS" \
         --experiment "math_eval" \
         --max-tokens 8192
     echo ""
@@ -129,7 +129,7 @@ if $RUN_CODE; then
         $ADAPTER_FLAG \
         --output "$EVAL_OUT/livecode_$(date +%Y%m%d).json" \
         --data-dir "$DATA" \
-        --aim-repo "$AIM_REPO" \
+        --log-dir "$TB_LOGS" \
         --experiment "code_eval"
     echo ""
 fi
@@ -144,7 +144,7 @@ if $RUN_ROUTER; then
             --router-model "$ROUTER_MODEL" \
             --data-dir "$DATA" \
             --output "$EVAL_OUT/router_$(date +%Y%m%d).json" \
-            --aim-repo "$AIM_REPO"
+            --log-dir "$TB_LOGS"
     else
         echo "  SKIP: router model not found at $ROUTER_MODEL"
     fi
@@ -153,9 +153,8 @@ fi
 
 echo "=== Evaluation Complete ==="
 echo "Results: $EVAL_OUT"
-echo "Dashboard: aim up --repo $AIM_REPO"
 echo ""
-echo "To view results from your local machine:"
-echo "  ssh -L 43800:localhost:43800 jhill5@login.delta.ncsa.illinois.edu"
-echo "  # Then run on Delta: aim up --repo $AIM_REPO --port 43800"
-echo "  # Open: http://localhost:43800"
+echo "To view TensorBoard from your local machine:"
+echo "  ssh -L 6006:localhost:6006 jhill5@login.delta.ncsa.illinois.edu"
+echo "  # Then run on Delta: tensorboard --logdir $TB_LOGS --port 6006"
+echo "  # Open: http://localhost:6006"

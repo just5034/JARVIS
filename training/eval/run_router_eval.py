@@ -35,11 +35,11 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", required=True, help="Path to save results JSON")
     parser.add_argument(
-        "--aim-repo",
-        default="/scratch/bgde-delta-gpu/aim",
-        help="Aim repo path",
+        "--log-dir",
+        default="/scratch/bgde-delta-gpu/tb_logs",
+        help="TensorBoard log directory",
     )
-    parser.add_argument("--no-track", action="store_true", help="Disable Aim tracking")
+    parser.add_argument("--no-track", action="store_true", help="Disable TensorBoard tracking")
     return parser
 
 
@@ -187,34 +187,25 @@ def main():
 
     results = evaluate_router(args.router_model, eval_data)
 
-    if not args.no_track:
-        from training.utils.tracking import create_run, log_eval_results
+    from training.utils.tracking import create_run, log_eval_results
 
-        run = create_run(
+    tracker = None
+    if not args.no_track:
+        tracker = create_run(
             experiment="router_eval",
             hparams={"model": args.router_model},
-            aim_repo=args.aim_repo,
-            tags=["eval", "router"],
+            log_dir=args.log_dir,
         )
-        log_eval_results(
-            run,
-            "router",
-            results["metrics"],
-            details=results["details"],
-            output_path=Path(args.output),
-        )
-        if run:
-            run.close()
-    else:
-        from training.utils.tracking import log_eval_results
 
-        log_eval_results(
-            None,
-            "router",
-            results["metrics"],
-            details=results["details"],
-            output_path=Path(args.output),
-        )
+    log_eval_results(
+        tracker,
+        "router",
+        results["metrics"],
+        details=results["details"],
+        output_path=Path(args.output),
+    )
+    if tracker:
+        tracker.close()
 
     acc = results["metrics"]["domain_accuracy"]
     print(f"\n[router] domain accuracy: {acc:.1%}")

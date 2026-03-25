@@ -176,35 +176,25 @@ def main():
 
     results = evaluate(args)
 
-    # Track with Aim
-    if not args.no_track:
-        from training.utils.tracking import create_run, log_eval_results
+    from training.utils.tracking import create_run, log_eval_results
 
-        run = create_run(
+    tracker = None
+    if not args.no_track:
+        tracker = create_run(
             experiment=args.experiment,
             hparams={"model": args.model, "adapter": args.adapter},
-            aim_repo=args.aim_repo,
-            tags=["eval", "gpqa"],
+            log_dir=args.log_dir,
         )
-        log_eval_results(
-            run,
-            "gpqa_diamond",
-            results["metrics"],
-            details=results["details"],
-            output_path=Path(args.output),
-        )
-        if run:
-            run.close()
-    else:
-        from training.utils.tracking import log_eval_results
 
-        log_eval_results(
-            None,
-            "gpqa_diamond",
-            results["metrics"],
-            details=results["details"],
-            output_path=Path(args.output),
-        )
+    log_eval_results(
+        tracker,
+        "gpqa_diamond",
+        results["metrics"],
+        details=results["details"],
+        output_path=Path(args.output),
+    )
+    if tracker:
+        tracker.close()
 
     target = 0.78
     acc = results["metrics"]["accuracy"]
