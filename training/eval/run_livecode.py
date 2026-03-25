@@ -53,7 +53,7 @@ def load_livecode(data_dir: str) -> list[dict]:
     try:
         from datasets import load_dataset
 
-        ds = load_dataset("livecodebench/code_generation_lite", split="test")
+        ds = load_dataset("bzantium/livecodebench", "release_v5", split="test")
     except Exception as e:
         print(f"ERROR: could not load LiveCodeBench: {e}", file=sys.stderr)
         print("Run 'python -m training.data.download_benchmarks' first.", file=sys.stderr)
