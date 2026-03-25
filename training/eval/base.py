@@ -50,6 +50,9 @@ def make_arg_parser(benchmark_name: str) -> argparse.ArgumentParser:
 def load_model(model_path: str, adapter_path: str | None = None):
     """Load a model via vLLM for fast batched inference.
 
+    Automatically detects available GPUs and uses tensor parallelism
+    if the model is too large for a single GPU (e.g., 32B on A100-40GB).
+
     Returns:
         vllm.LLM instance ready for generation.
     """
@@ -59,19 +62,29 @@ def load_model(model_path: str, adapter_path: str | None = None):
         print("ERROR: vllm is required for evaluation. Install with: pip install vllm", file=sys.stderr)
         sys.exit(1)
 
+    import os
+    import torch
+
+    # Detect available GPUs for tensor parallelism
+    if "CUDA_VISIBLE_DEVICES" in os.environ:
+        n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
+    else:
+        n_gpus = torch.cuda.device_count()
+
+    tp_size = max(1, n_gpus)
+
     kwargs: dict[str, Any] = {
         "model": model_path,
         "trust_remote_code": True,
         "max_model_len": 8192,
+        "tensor_parallel_size": tp_size,
     }
 
     if adapter_path:
-        from vllm.lora.request import LoRARequest
-
         kwargs["enable_lora"] = True
-        print(f"[eval] loading model {model_path} with adapter {adapter_path}")
+        print(f"[eval] loading model {model_path} with adapter {adapter_path} (TP={tp_size})")
     else:
-        print(f"[eval] loading model {model_path}")
+        print(f"[eval] loading model {model_path} (TP={tp_size})")
 
     llm = LLM(**kwargs)
     return llm
