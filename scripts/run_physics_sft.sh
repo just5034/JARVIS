@@ -30,7 +30,7 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/u/$USER/jarvis-venv"
+VENV="/scratch/bgde-delta-gpu/jarvis-venv"
 source "$VENV/bin/activate"
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3

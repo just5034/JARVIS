@@ -28,11 +28,11 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/u/$USER/jarvis-venv"
+VENV="/scratch/bgde-delta-gpu/jarvis-venv"
 if [ ! -d "$VENV" ]; then
     python -m venv "$VENV"
     source "$VENV/bin/activate"
-    pip install -e "/u/$USER/jarvis[serving,training]"
+    pip install -e "/u/$USER/JARVIS[serving,training]"
 else
     source "$VENV/bin/activate"
 fi
