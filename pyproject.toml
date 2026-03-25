@@ -32,9 +32,10 @@ training = [
     "transformers>=4.48.0",
     "deepspeed>=0.16.0",
     "datasets>=3.0.0",
-    "wandb>=0.19.0",
     "peft>=0.14.0",
     "accelerate>=1.2.0",
+    "aim>=3.25.0",
+    "tensorboard>=2.18.0",
 ]
 dev = [
     "pytest>=8.0",
