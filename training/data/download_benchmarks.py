@@ -33,26 +33,31 @@ def download_gpqa(output_dir: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     print("[download] GPQA Diamond...")
-    # Try ungated source first, then gated original
+    # Try multiple repos and configs — GPQA may be gated
     ds = None
-    for repo in ["openai/gpqa", "Idavidrein/gpqa"]:
-        for config in ["gpqa_diamond", "diamond", None]:
-            try:
-                kwargs = {"split": "train", "trust_remote_code": True}
-                if config:
-                    ds = load_dataset(repo, config, **kwargs)
-                else:
-                    ds = load_dataset(repo, **kwargs)
-                print(f"  loaded from {repo}" + (f" config={config}" if config else ""))
-                break
-            except Exception:
-                continue
-        if ds is not None:
+    attempts = [
+        ("openai/gpqa", "gpqa_diamond"),
+        ("openai/gpqa", "diamond"),
+        ("openai/gpqa", None),
+        ("Idavidrein/gpqa", "gpqa_diamond"),
+        ("Idavidrein/gpqa", None),
+    ]
+    last_err = None
+    for repo, config in attempts:
+        try:
+            if config:
+                ds = load_dataset(repo, config, split="train")
+            else:
+                ds = load_dataset(repo, split="train")
+            print(f"  loaded from {repo}" + (f" config={config}" if config else ""))
             break
+        except Exception as e:
+            last_err = e
+            continue
 
     if ds is None:
-        print("  ERROR: GPQA requires HuggingFace authentication.")
-        print("  Run: huggingface-cli login")
+        print(f"  ERROR: could not load GPQA: {last_err}")
+        print("  If gated, run: huggingface-cli login")
         print("  Then accept access at: https://huggingface.co/datasets/Idavidrein/gpqa")
         return 0
 
@@ -148,23 +153,27 @@ def download_livecode(output_dir: Path) -> int:
 
     print("[download] LiveCodeBench...")
     ds = None
-    # Try multiple sources — trust_remote_code needed for dataset scripts
+    # Try multiple repos and splits
     sources = [
+        ("livecodebench/livecodebench", "test"),
+        ("livecodebench/livecodebench", "train"),
         ("livecodebench/code_generation_lite", "test"),
         ("livecodebench/code_generation_lite", "train"),
-        ("livecodebench/livecodebench", "test"),
     ]
+    last_err = None
     for repo, split in sources:
         try:
-            ds = load_dataset(repo, split=split, trust_remote_code=True)
+            ds = load_dataset(repo, split=split)
             print(f"  loaded from {repo} split={split}")
             break
-        except Exception:
+        except Exception as e:
+            last_err = e
             continue
 
     if ds is None:
-        print("  ERROR: could not load LiveCodeBench")
-        print("  Try: pip install datasets --upgrade")
+        print(f"  ERROR: could not load LiveCodeBench: {last_err}")
+        print("  Dataset may use unsupported loading scripts.")
+        print("  You can manually download from: https://livecodebench.github.io/")
         return 0
 
     problems = []
