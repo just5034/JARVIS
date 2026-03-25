@@ -8,7 +8,7 @@ Usage:
     python -m training.eval.run_livecode \
         --model /projects/bgde-delta-gpu/models/qwen3-32b \
         --adapter /projects/bgde-delta-gpu/adapters/code_general \
-        --output /scratch/bgde-delta-gpu/eval/livecode.json
+        --output /scratch/bgde/jhill5/eval/livecode.json
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ Usage:
     python -m training.eval.run_gpqa \
         --model /projects/bgde-delta-gpu/models/r1-distill-qwen-32b \
         --adapter /projects/bgde-delta-gpu/adapters/physics_general \
-        --output /scratch/bgde-delta-gpu/eval/gpqa_diamond.json
+        --output /scratch/bgde/jhill5/eval/gpqa_diamond.json
 """
 
 from __future__ import annotations

@@ -13,15 +13,15 @@ from actual model performance.
 Usage:
     # Generate initial training set (domain labels only):
     python -m training.data.generate_router_data \
-        --output /scratch/bgde-delta-gpu/data/router_training.jsonl \
-        --mmlu-dir /scratch/bgde-delta-gpu/data/benchmarks/mmlu_stem
+        --output /scratch/bgde/jhill5/data/router_training.jsonl \
+        --mmlu-dir /scratch/bgde/jhill5/data/benchmarks/mmlu_stem
 
     # Add difficulty labels after brains are trained (Phase 4H):
     python -m training.data.generate_router_data \
-        --output /scratch/bgde-delta-gpu/data/router_training_with_difficulty.jsonl \
+        --output /scratch/bgde/jhill5/data/router_training_with_difficulty.jsonl \
         --add-difficulty \
         --model /projects/bgde-delta-gpu/models/r1-distill-qwen-32b \
-        --input /scratch/bgde-delta-gpu/data/router_training.jsonl
+        --input /scratch/bgde/jhill5/data/router_training.jsonl
 """
 
 from __future__ import annotations
@@ -280,7 +280,7 @@ def main():
     parser.add_argument("--output", required=True, help="Output JSONL path")
     parser.add_argument(
         "--mmlu-dir",
-        default="/scratch/bgde-delta-gpu/data/benchmarks/mmlu_stem",
+        default="/scratch/bgde/jhill5/data/benchmarks/mmlu_stem",
         help="Path to downloaded MMLU STEM data",
     )
     parser.add_argument(

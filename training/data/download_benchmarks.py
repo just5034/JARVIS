@@ -10,7 +10,7 @@ Downloads:
 Usage:
     # On Delta (download to scratch):
     python -m training.data.download_benchmarks \
-        --output /scratch/bgde-delta-gpu/data/benchmarks
+        --output /scratch/bgde/jhill5/data/benchmarks
 
     # Locally (for development):
     python -m training.data.download_benchmarks --output ./data/benchmarks
@@ -335,7 +335,7 @@ def main():
     parser = argparse.ArgumentParser(description="Download all JARVIS benchmark datasets")
     parser.add_argument(
         "--output",
-        default="/scratch/bgde-delta-gpu/data/benchmarks",
+        default="/scratch/bgde/jhill5/data/benchmarks",
         help="Output directory for downloaded data",
     )
     parser.add_argument(

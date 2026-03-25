@@ -23,7 +23,7 @@ def make_arg_parser(benchmark_name: str) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--log-dir",
-        default="/scratch/bgde-delta-gpu/tb_logs",
+        default="/scratch/bgde/jhill5/tb_logs",
         help="TensorBoard log directory for metric tracking",
     )
     parser.add_argument(
@@ -31,7 +31,7 @@ def make_arg_parser(benchmark_name: str) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--data-dir",
-        default="/scratch/bgde-delta-gpu/data/benchmarks",
+        default="/scratch/bgde/jhill5/data/benchmarks",
         help="Directory containing downloaded benchmark data",
     )
     parser.add_argument("--max-tokens", type=int, default=4096, help="Max generation tokens")

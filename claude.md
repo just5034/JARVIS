@@ -83,6 +83,12 @@ jarvis/
     └── benchmark.sh           # Run full evaluation suite
 ```
 
+## HPC / SLURM Rules
+
+- **SLURM account:** Always use `--account=bgde-delta-gpu` for ALL JARVIS jobs on Delta. No exceptions. This is the ONLY allocation for this project.
+- **Python module:** `module load python/3.13.5-gcc13.3.1` (NOT anaconda3, which doesn't exist on Delta). System Python is 3.9 — too old.
+- **Environments:** Use plain Python venv, not conda.
+
 ## Git & Commit Rules
 
 - **No AI co-authorship lines.** Never add `Co-Authored-By` or any similar attribution to Claude, Anthropic, or any AI in commits.
@@ -102,7 +108,7 @@ jarvis/
 
 ## Current Status
 
-**Phase: Pre-development planning.** No code written yet. Training has not started. All documents in `docs/` describe the target system. Development will proceed in phases per `docs/ROADMAP.md`.
+**Phases 0-6 complete (0-3 validated on Delta).** Full serving stack: vLLM inference, 8-domain router, difficulty-aware amplification (single_pass/best-of-N/verified), specialist loading with LRU eviction (ESM3/Evo2 adapters), RAG for physics queries (30-passage corpus). 142 tests passing. Remaining: Phase 4 (Training on Delta — 8,000 SUs), Phase 7 (GRACE Integration), Phase 8 (Optimization).
 
 ## Key Reference Documents
 

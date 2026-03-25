@@ -19,8 +19,8 @@
 #SBATCH --time=04:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde-delta-gpu/logs/eval-%j.out
-#SBATCH --error=/scratch/bgde-delta-gpu/logs/eval-%j.err
+#SBATCH --output=/scratch/bgde/jhill5/logs/eval-%j.out
+#SBATCH --error=/scratch/bgde/jhill5/logs/eval-%j.err
 
 set -euo pipefail
 
@@ -28,7 +28,7 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde-delta-gpu/jarvis-venv"
+VENV="/scratch/bgde/jhill5/jarvis-venv"
 if [ ! -d "$VENV" ]; then
     python -m venv "$VENV"
     source "$VENV/bin/activate"
@@ -43,9 +43,9 @@ export TMPDIR=/tmp
 # ─── Paths ───
 MODELS="/projects/bgde-delta-gpu/models"
 ADAPTERS="/projects/bgde-delta-gpu/adapters"
-DATA="/scratch/bgde-delta-gpu/data/benchmarks"
-EVAL_OUT="/scratch/bgde-delta-gpu/eval"
-TB_LOGS="/scratch/bgde-delta-gpu/tb_logs"
+DATA="/scratch/bgde/jhill5/data/benchmarks"
+EVAL_OUT="/scratch/bgde/jhill5/eval"
+TB_LOGS="/scratch/bgde/jhill5/tb_logs"
 
 mkdir -p "$EVAL_OUT" "$TB_LOGS"
 

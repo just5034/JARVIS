@@ -1,7 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python -m jarvis --help)",
+      "Bash(.venv/Scripts/python -m jarvis --version)",
+      "Bash(.venv/Scripts/python -m jarvis validate)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -v)",
+      "Bash(find /c/Users/joon4/OneDrive/Documents/GitHub/JARVIS/src -type f -name *.py)",
+      "Bash(find /c/Users/joon4/OneDrive/Documents/GitHub/JARVIS -maxdepth 2 -type f \\\\\\(-name *.md -o -name jarvis_master_plan*.md \\\\\\))",
+      "Bash(wc:*)",
+      "Bash(python -m pytest tests/ -v --tb=no)",
+      "Bash(find C:/Users/joon4/OneDrive/Documents/GitHub/JARVIS/training -type f -name *.py)",
+      "Bash(grep:*)",
+      "Bash(find /c/Users/joon4/OneDrive/Documents/GitHub/JARVIS/src -type f -name \"*.py\" -exec wc -l {} +)",
+      "Bash(find /c/Users/joon4/OneDrive/Documents/GitHub/JARVIS/tests -type f -name \"*.py\" -exec wc -l {} +)",
+      "Bash(cd:*)",
+      "Bash(python -m pytest tests/ -q --tb=short)",
+      "Bash(pip install:*)"
     ]
   }
 }

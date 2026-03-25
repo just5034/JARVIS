@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-SCRATCH="/scratch/bgde-delta-gpu"
+SCRATCH="/scratch/bgde/jhill5"
 LOGS="$SCRATCH/logs"
 EVAL="$SCRATCH/eval"
 CHECKPOINTS="$SCRATCH/checkpoints"
