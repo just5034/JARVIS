@@ -34,7 +34,7 @@ def make_arg_parser(benchmark_name: str) -> argparse.ArgumentParser:
         default="/scratch/bgde/jhill5/data/benchmarks",
         help="Directory containing downloaded benchmark data",
     )
-    parser.add_argument("--max-tokens", type=int, default=4096, help="Max generation tokens")
+    parser.add_argument("--max-tokens", type=int, default=16384, help="Max generation tokens")
     parser.add_argument("--temperature", type=float, default=0.0, help="Sampling temperature")
     parser.add_argument(
         "--n-samples",
@@ -76,7 +76,7 @@ def load_model(model_path: str, adapter_path: str | None = None):
     kwargs: dict[str, Any] = {
         "model": model_path,
         "trust_remote_code": True,
-        "max_model_len": 8192,
+        "max_model_len": 32768,
         "tensor_parallel_size": tp_size,
     }
 

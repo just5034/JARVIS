@@ -108,8 +108,7 @@ if $RUN_MATH; then
         --output "$EVAL_OUT/aime_2024_$(date +%Y%m%d).json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
-        --experiment "math_eval" \
-        --max-tokens 8192
+        --experiment "math_eval"
     echo ""
 fi
 
