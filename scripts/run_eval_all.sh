@@ -94,7 +94,8 @@ if $RUN_PHYSICS; then
         --output "$EVAL_OUT/gpqa_diamond_$(date +%Y%m%d).json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
-        --experiment "physics_eval"
+        --experiment "physics_eval" \
+        --temperature 0.6
     echo ""
 fi
 
@@ -108,7 +109,8 @@ if $RUN_MATH; then
         --output "$EVAL_OUT/aime_2024_$(date +%Y%m%d).json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
-        --experiment "math_eval"
+        --experiment "math_eval" \
+        --temperature 0.6
     echo ""
 fi
 

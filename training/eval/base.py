@@ -100,6 +100,9 @@ def generate_batch(
 ) -> list[list[str]]:
     """Generate completions for a batch of prompts.
 
+    Automatically applies the model's chat template so instruct/chat models
+    receive properly formatted input (e.g., <|im_start|> tokens for Qwen2.5).
+
     Returns:
         List of lists — each inner list has n completions for the corresponding prompt.
     """
@@ -111,13 +114,24 @@ def generate_batch(
         n=n,
     )
 
+    # Apply chat template — all JARVIS eval models are instruct/chat models
+    # that expect special tokens (e.g., Qwen2.5 ChatML format).
+    tokenizer = llm.get_tokenizer()
+    formatted_prompts = []
+    for prompt in prompts:
+        messages = [{"role": "user", "content": prompt}]
+        formatted = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        formatted_prompts.append(formatted)
+
     kwargs = {}
     if adapter_path:
         from vllm.lora.request import LoRARequest
 
         kwargs["lora_request"] = LoRARequest("adapter", 1, adapter_path)
 
-    outputs = llm.generate(prompts, params, **kwargs)
+    outputs = llm.generate(formatted_prompts, params, **kwargs)
 
     results = []
     for output in outputs:
