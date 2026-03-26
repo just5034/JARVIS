@@ -12,7 +12,7 @@
 #SBATCH --account=bgde-delta-gpu
 #SBATCH --partition=gpuA100x4
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=2
+#SBATCH --gpus-per-node=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=120G
