@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from jarvis.config import InferenceConfig
 from jarvis.inference.budget_forcing import BudgetForcer
+from jarvis.inference.code_verifier import CodeVerifier
 from jarvis.inference.sampling import CandidateSampler
 from jarvis.inference.verification import ThinkPRMVerifier
 from jarvis.inference.voting import SelfConsistencyVoter
@@ -60,6 +61,11 @@ class InferenceEngine:
         self._sampler = CandidateSampler()
         self._voter = SelfConsistencyVoter()
         self._verifier = ThinkPRMVerifier()
+        cv = getattr(config, "code_verification", None)
+        self._code_verifier = CodeVerifier(
+            timeout=cv.execution_timeout_seconds if cv else 30,
+            max_test_inputs=cv.max_test_inputs if cv else 10,
+        )
         self._budget_forcer = BudgetForcer()
         self._verifier_loaded = False
         self._retriever = retriever
@@ -127,6 +133,22 @@ class InferenceEngine:
         if level_config.verification_chain:
             gen_messages = self._apply_verification_chain(messages, domain)
 
+        # For code queries with execution verification enabled, use S* strategy
+        cv = getattr(self.config, "code_verification", None)
+        code_verification = cv is not None and cv.enabled
+        if domain == "code" and code_verification and strategy in ("best_of_n", "best_of_n_verified"):
+            # Extract problem text from user message for test generation
+            problem_text = ""
+            for m in reversed(messages):
+                if m["role"] == "user":
+                    problem_text = m["content"]
+                    break
+
+            return await self._best_of_n_executed(
+                model, gen_messages, level_config.num_candidates,
+                problem_text, top_p, max_tokens, stop,
+            )
+
         if strategy == "single_pass":
             return await self._single_pass(
                 model, gen_messages, temperature, top_p, max_tokens, stop
@@ -193,6 +215,43 @@ class InferenceEngine:
             finish_reason=winner_result.finish_reason,
             strategy="best_of_n",
             num_candidates=n,
+        )
+
+    async def _best_of_n_executed(
+        self, model, messages, n, problem_text, top_p, max_tokens, stop,
+    ) -> InferenceResult:
+        """Code: generate N candidates, select best by execution against tests."""
+        results = await self._sampler.sample(
+            model, messages, n=n,
+            temperature=0.8,  # Higher temp for diverse code solutions
+            top_p=top_p, max_tokens=max_tokens, stop=stop,
+        )
+
+        candidates = [r.text for r in results]
+        winner_text, pass_rate, exec_results = self._code_verifier.verify_candidates(
+            candidates, problem_text=problem_text,
+        )
+
+        # If S* produced no results (no tests or no valid code), fall back to voting
+        if not exec_results or pass_rate == 0.0:
+            logger.info("S* verification found no passing candidates, falling back to voting")
+            winner_text, _ = self._voter.vote(candidates, domain="code")
+
+        # Find matching result for token counts
+        winner_result = results[0]
+        for r in results:
+            if r.text == winner_text:
+                winner_result = r
+                break
+
+        return InferenceResult(
+            text=winner_text,
+            prompt_tokens=winner_result.prompt_tokens,
+            completion_tokens=winner_result.completion_tokens,
+            finish_reason=winner_result.finish_reason,
+            strategy="best_of_n_executed",
+            num_candidates=n,
+            verification_score=pass_rate,
         )
 
     async def _best_of_n_verified(
