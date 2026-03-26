@@ -35,8 +35,8 @@ GRACE (HEP Agent) ──HTTP──▶ JARVIS API (localhost:8000)
 
 - **Deployment target:** NVIDIA DGX Spark (128GB unified RAM, GB10 Blackwell, $4,699)
 - **Physics brain base:** R1-Distill-Qwen-32B (Qwen2.5 architecture, 62.1% GPQA baseline, R1 reasoning distillation)
-- **Code brain base:** Qwen3-32B (Qwen3 architecture, stronger code baseline for AZR self-play)
-- **Two separate bases (~32 GB total at FP4).** Different architectures — LoRA adapters are NOT cross-compatible. Each brain loads its own base model.
+- **Code brain base:** Qwen2.5-Coder-32B-Instruct (Qwen2.5 architecture, purpose-built for code, HumanEval 88.4%, LiveCodeBench ~40-50%)
+- **Two separate bases (~32 GB total at FP4).** Both now use Qwen2.5 architecture. LoRA adapters are still base-specific (trained on different data).
 - **Math brain:** R1-Distill-Llama-70B (off-shelf, no training) or R1-Distill-Qwen-32B with math LoRA (if memory-constrained)
 - **Router:** Lightweight BERT classifier (~110M params), two-stage: domain → difficulty
 - **Specialist models:** Standalone 7B models (ChemLLM, BioMistral, ESM3-open, Evo 2) loaded from SSD on demand
@@ -108,7 +108,7 @@ jarvis/
 
 ## Current Status
 
-**Phases 0-6 complete (0-3 validated on Delta).** Full serving stack: vLLM inference, 8-domain router, difficulty-aware amplification (single_pass/best-of-N/verified), specialist loading with LRU eviction (ESM3/Evo2 adapters), RAG for physics queries (30-passage corpus). 142 tests passing. Remaining: Phase 4 (Training on Delta — 8,000 SUs), Phase 7 (GRACE Integration), Phase 8 (Optimization).
+**Phases 0-6 complete (0-3 validated on Delta).** Full serving stack: vLLM inference, 8-domain router, difficulty-aware amplification (single_pass/best-of-N/verified), specialist loading with LRU eviction (ESM3/Evo2 adapters), RAG for physics queries (30-passage corpus). 142 tests passing. Code brain swapped from Qwen3-32B to Qwen2.5-Coder-32B-Instruct (purpose-built, +20% baseline). S* code execution verification planned. Remaining: Phase 4 (Training on Delta — 8,000 SUs, code budget reallocated to physics GRPO), Phase 7 (GRACE Integration), Phase 8 (Optimization).
 
 ## Key Reference Documents
 

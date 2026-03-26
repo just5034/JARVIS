@@ -44,10 +44,23 @@ speculative_decoding:
 
 code_verification:
   enabled: true
-  difficulty_threshold: "hard"
+  difficulty_threshold: "medium"
   sandbox: "docker"
   max_test_inputs: 10
   execution_timeout_seconds: 30
+
+domain_overrides:
+  code:
+    medium:
+      num_candidates: 4
+      temperature: 0.8
+      voting: "execution"
+      budget_forcing: false
+    hard:
+      num_candidates: 8
+      voting: "execution"
+      verifier: "execution"
+      budget_forcing: false
 
 context_management:
   default_kv_dtype: "fp8"

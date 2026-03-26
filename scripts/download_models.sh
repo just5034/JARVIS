@@ -39,7 +39,7 @@ download "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B" \
     "$MODEL_DIR/brains/r1-distill-qwen-32b" \
     "Physics base (Qwen2.5, ~16GB FP4)"
 
-download "Qwen/Qwen3-32B" \
+download "Qwen/Qwen2.5-Coder-32B-Instruct" \
     "$MODEL_DIR/brains/qwen3-32b" \
     "Code base (Qwen3, ~16GB FP4)"
 

@@ -10,13 +10,13 @@ base_models:
     load_policy: "always_resident"
     roles: ["physics", "math"]
 
-  qwen3_32b:
-    model_id: "Qwen/Qwen3-32B"
-    architecture: "qwen3"
-    path: "/models/brains/qwen3-32b"
+  qwen25_coder_32b:
+    model_id: "Qwen/Qwen2.5-Coder-32B-Instruct"
+    architecture: "qwen2.5"
+    path: "/models/brains/qwen2.5-coder-32b-instruct"
     size_gb: 16.0
     quantization: "nvfp4"
-    context_length: 32768
+    context_length: 131072
     recommended_max_context: 32768
     load_policy: "always_resident"
     roles: ["code"]
@@ -49,12 +49,12 @@ lora_adapters:
     size_gb: 0.3
 
   code_general:
-    base_model: "qwen3_32b"
+    base_model: "qwen25_coder_32b"
     path: "/models/adapters/code_general"
     size_gb: 0.3
 
   code_hep:
-    base_model: "qwen3_32b"
+    base_model: "qwen25_coder_32b"
     path: "/models/adapters/code_hep"
     size_gb: 0.3
 

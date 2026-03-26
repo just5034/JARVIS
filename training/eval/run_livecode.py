@@ -6,7 +6,7 @@ Target: >= 65% for code brain
 
 Usage:
     python -m training.eval.run_livecode \
-        --model /projects/bgde/jhill5/models/qwen3-32b \
+        --model /projects/bgde/jhill5/models/qwen2.5-coder-32b-instruct \
         --adapter /projects/bgde/jhill5/adapters/code_general \
         --output /scratch/bgde/jhill5/eval/livecode.json
 """

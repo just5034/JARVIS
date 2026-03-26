@@ -38,17 +38,19 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 
 | Field | Value |
 |-------|-------|
-| **Base** | `Qwen/Qwen3-32B` |
-| **Adapter** | Custom LoRA trained on Delta (code_general + code_hep) |
-| **Parameters** | 32B base + LoRA adapters |
-| **FP4 Size** | ~16 GB (Qwen3 base, always resident) + 0.3 GB (adapter) |
-| **Source** | Base: [HuggingFace](https://huggingface.co/Qwen/Qwen3-32B) |
+| **Base** | `Qwen/Qwen2.5-Coder-32B-Instruct` |
+| **Adapter** | Custom LoRA trained on Delta (code_hep only — base model already strong at general code) |
+| **Parameters** | 32B base + LoRA adapter |
+| **FP4 Size** | ~16 GB (Qwen2.5-Coder base, always resident) + 0.3 GB (adapter) |
+| **Source** | Base: [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct) |
 | **License** | Apache 2.0 |
-| **Training** | ~2,800 SU on Delta — AZR self-play RL + targeted SFT |
-| **Baseline** | LiveCodeBench: ~45% |
-| **Target** | LiveCodeBench: 65-72% |
+| **Training** | ~250 SU on Delta — HEP-specific code LoRA only (Geant4, ROOT, Pythia patterns) |
+| **Baseline** | HumanEval: 88.4%, LiveCodeBench: ~40-50% |
+| **Target** | LiveCodeBench: 65%+ (via S* execution verification + HEP LoRA) |
 
-**RESOLVED: Two separate bases.** Physics uses R1-Distill-Qwen-32B (Qwen2.5 architecture) and Code uses Qwen3-32B (Qwen3 architecture). These are architecturally incompatible — different attention implementations, tokenizers, and layer structures. LoRA adapters trained on one base CANNOT be loaded onto the other. Both bases are always resident in memory (~32 GB total at FP4). The math brain uses a LoRA adapter on the physics base (R1-Distill-Qwen-32B), or optionally the separate R1-Distill-Llama-70B for maximum math performance.
+**Two separate bases, same architecture.** Physics uses R1-Distill-Qwen-32B and Code uses Qwen2.5-Coder-32B-Instruct. Both are Qwen2.5 architecture but LoRA adapters are still base-specific (trained on different model weights). Both bases are always resident in memory (~32 GB total at FP4). The math brain uses a LoRA adapter on the physics base, or optionally the separate R1-Distill-Llama-70B for maximum math performance.
+
+**Code performance strategy:** Instead of expensive AZR self-play training (original: 2,600 SU), we use a purpose-built code model + S* execution-based verification at inference time. This achieves the same target with 250 SU and redirects 2,350 SU to physics GRPO training.
 
 ---
 

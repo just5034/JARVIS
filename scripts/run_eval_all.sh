@@ -115,7 +115,7 @@ fi
 # ─── LiveCodeBench (Code Brain) ───
 if $RUN_CODE; then
     echo "=== [3/4] LiveCodeBench — Code Brain ==="
-    CODE_MODEL="${MODELS}/qwen3-32b"
+    CODE_MODEL="${MODELS}/qwen2.5-coder-32b-instruct"
     CODE_ADAPTER="${ADAPTERS}/code_general"
 
     ADAPTER_FLAG=""

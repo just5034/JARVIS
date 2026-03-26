@@ -52,7 +52,7 @@ domain_to_brain:
     adapter: "physics_general"
     hep_adapter: "physics_hep"
   code:
-    base_model: "qwen3_32b"
+    base_model: "qwen25_coder_32b"
     adapter: "code_general"
     hep_adapter: "code_hep"
   chemistry:

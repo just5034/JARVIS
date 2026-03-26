@@ -142,7 +142,7 @@ class TestRouter:
         r = Router(config)
         decision = r.route("Write a Python function to implement binary search")
         assert decision.domain == "code"
-        assert decision.base_model == "qwen3_32b"
+        assert decision.base_model == "qwen25_coder_32b"
 
     def test_math_routing(self, config: JarvisConfig) -> None:
         r = Router(config)
