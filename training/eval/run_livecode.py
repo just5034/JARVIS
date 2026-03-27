@@ -1,13 +1,18 @@
 """Evaluate model on LiveCodeBench — code generation with execution.
 
-Dataset: livecodebench/code_generation_lite
+Dataset: bzantium/livecodebench (mirror of livecodebench/code_generation_lite)
 Metric: pass@1 (% of problems where generated code passes all test cases)
 Target: >= 65% for code brain
+
+Eval methodology aligned with official LiveCodeBench harness:
+- Separate prompts for stdin/stdout vs function-call (LeetCode) problems
+- Extract LAST code block from model output (not first)
+- Numeric output comparison with Decimal fallback
+- Pre-import common modules in execution environment
 
 Usage:
     python -m training.eval.run_livecode \
         --model /projects/bgde/jhill5/models/qwen2.5-coder-32b-instruct \
-        --adapter /projects/bgde/jhill5/adapters/code_general \
         --output /scratch/bgde/jhill5/eval/livecode.json
 """
 
@@ -18,6 +23,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from training.eval.base import (
@@ -27,17 +33,47 @@ from training.eval.base import (
 )
 
 
-LIVECODE_PROMPT_TEMPLATE = """Solve the following programming problem. Write a complete Python solution.
+# Prompt for stdin/stdout problems (Codeforces/AtCoder style)
+STDIN_PROMPT = """You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests. You will NOT return anything except for the program.
 
 {problem_description}
 
-{input_format}
+Read the inputs from stdin solve the problem and write the answer to stdout (do not directly test on the sample inputs). Enclose your code within delimiters as follows.
+```python
+# YOUR CODE HERE
+```"""
 
-{output_format}
+# Prompt for function-call problems (LeetCode style with starter code)
+FUNCTION_PROMPT = """You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests. You will NOT return anything except for the program.
 
-{constraints}
+{problem_description}
 
-Write your solution as a complete Python program that reads from stdin and writes to stdout. Put your code inside a ```python code block."""
+You will use the following starter code to write the solution to the problem and enclose your code within delimiters as follows.
+```python
+{starter_code}
+```"""
+
+
+# Pre-import block injected into execution environment (matches official harness)
+PREIMPORT_BLOCK = """\
+import sys
+import string
+import re
+import datetime
+import collections
+import heapq
+import bisect
+import copy
+import math
+import itertools
+import functools
+import operator
+from collections import defaultdict, Counter, deque
+from itertools import permutations, combinations, accumulate
+from functools import lru_cache, reduce
+from typing import List, Optional, Tuple, Dict, Set
+sys.setrecursionlimit(50000)
+"""
 
 
 def load_livecode(data_dir: str) -> list[dict]:
@@ -66,12 +102,13 @@ def load_livecode(data_dir: str) -> list[dict]:
             "title": row.get("question_title", row.get("title", "")),
             "description": row.get("question_content", row.get("description", "")),
             "difficulty": row.get("difficulty", "unknown"),
+            "starter_code": row.get("starter_code", ""),
+            "fn_name": row.get("fn_name", None),
             "input_format": row.get("input_format", ""),
             "output_format": row.get("output_format", ""),
             "constraints": row.get("constraints", ""),
         }
 
-        # Test cases may be in different formats
         if "public_test_cases" in row:
             test_data = row["public_test_cases"]
             if isinstance(test_data, str):
@@ -97,23 +134,26 @@ def load_livecode(data_dir: str) -> list[dict]:
 
 
 def extract_python_code(text: str) -> str | None:
-    """Extract Python code from model output (looks for code blocks)."""
-    # Try ```python ... ``` first
-    match = re.search(r"```python\s*\n(.*?)```", text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-
-    # Try generic code block
-    match = re.search(r"```\s*\n(.*?)```", text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-
-    # Fallback: look for code-like content (def/import/class at start of line)
+    """Extract the LAST code block from model output (matches official harness)."""
     lines = text.split("\n")
+
+    # Find all lines containing ```
+    fence_indices = [i for i, line in enumerate(lines) if "```" in line]
+
+    # Need at least 2 fences to form a block
+    if len(fence_indices) >= 2:
+        # Take content between the last pair of fences
+        start = fence_indices[-2] + 1
+        end = fence_indices[-1]
+        code = "\n".join(lines[start:end]).strip()
+        if code:
+            return code
+
+    # Fallback: look for code-like content
     code_lines = []
     in_code = False
     for line in lines:
-        if re.match(r"^(import |from |def |class |if |for |while |print)", line):
+        if re.match(r"^(import |from |def |class |if |for |while |print|sys\.)", line):
             in_code = True
         if in_code:
             code_lines.append(line)
@@ -124,14 +164,40 @@ def extract_python_code(text: str) -> str | None:
     return None
 
 
-def run_code_safe(code: str, stdin: str, timeout: int = 30) -> tuple[bool, str]:
-    """Run Python code in a subprocess with timeout.
+def compare_outputs(actual: str, expected: str) -> bool:
+    """Compare outputs with Decimal numeric fallback (matches official harness)."""
+    actual_lines = actual.strip().splitlines()
+    expected_lines = expected.strip().splitlines()
 
-    Returns:
-        (success, stdout_or_error)
-    """
+    if len(actual_lines) != len(expected_lines):
+        return False
+
+    for a_line, e_line in zip(actual_lines, expected_lines):
+        a = a_line.strip()
+        e = e_line.strip()
+
+        # Exact match first
+        if a == e:
+            continue
+
+        # Decimal numeric fallback
+        try:
+            if Decimal(a) == Decimal(e):
+                continue
+        except (InvalidOperation, ValueError):
+            pass
+
+        return False
+
+    return True
+
+
+def run_code_safe(code: str, stdin: str, timeout: int = 30) -> tuple[bool, str]:
+    """Run Python code in a subprocess with timeout and pre-imports."""
+    full_code = PREIMPORT_BLOCK + "\n" + code
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(code)
+        f.write(full_code)
         f.flush()
         try:
             result = subprocess.run(
@@ -152,7 +218,57 @@ def run_code_safe(code: str, stdin: str, timeout: int = 30) -> tuple[bool, str]:
             Path(f.name).unlink(missing_ok=True)
 
 
-def check_test_cases(code: str, test_cases: list[dict], timeout: int = 30) -> tuple[int, int]:
+def run_function_call(code: str, fn_name: str, test_input: str, timeout: int = 30) -> tuple[bool, str]:
+    """Run a function-call style problem (LeetCode) by calling the function directly."""
+    # Parse the test input as JSON arguments
+    try:
+        args = json.loads(test_input)
+        if not isinstance(args, list):
+            args = [args]
+    except (json.JSONDecodeError, TypeError):
+        args = [test_input]
+
+    # Build a wrapper that imports the code and calls the function
+    args_repr = ", ".join(repr(a) for a in args)
+    wrapper = f"""{PREIMPORT_BLOCK}
+{code}
+
+# Call the function
+_sol = Solution()
+_result = _sol.{fn_name}({args_repr})
+# Convert tuples to lists for comparison (matches official harness)
+if isinstance(_result, tuple):
+    _result = list(_result)
+print(json.dumps(_result))
+"""
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(wrapper)
+        f.flush()
+        try:
+            result = subprocess.run(
+                [sys.executable, f.name],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                return True, result.stdout
+            return False, result.stderr[:500]
+        except subprocess.TimeoutExpired:
+            return False, "TIMEOUT"
+        except Exception as e:
+            return False, str(e)[:500]
+        finally:
+            Path(f.name).unlink(missing_ok=True)
+
+
+def check_test_cases(
+    code: str,
+    test_cases: list[dict],
+    fn_name: str | None = None,
+    timeout: int = 30,
+) -> tuple[int, int]:
     """Run code against test cases. Returns (passed, total)."""
     if not test_cases:
         return 0, 0
@@ -164,9 +280,30 @@ def check_test_cases(code: str, test_cases: list[dict], timeout: int = 30) -> tu
         test_input = tc.get("input", "")
         expected = tc.get("output", tc.get("expected_output", "")).strip()
 
-        success, output = run_code_safe(code, test_input, timeout)
-        if success and output.strip() == expected:
-            passed += 1
+        if fn_name:
+            # Function-call problem: call Solution().fn_name() with parsed args
+            success, output = run_function_call(code, fn_name, test_input, timeout)
+            if success:
+                # Compare JSON outputs for function-call problems
+                try:
+                    actual_val = json.loads(output.strip())
+                    expected_val = json.loads(expected)
+                    # Convert tuples to lists
+                    if isinstance(actual_val, tuple):
+                        actual_val = list(actual_val)
+                    if isinstance(expected_val, tuple):
+                        expected_val = list(expected_val)
+                    if actual_val == expected_val:
+                        passed += 1
+                except (json.JSONDecodeError, TypeError):
+                    # Fall back to string comparison
+                    if compare_outputs(output, expected):
+                        passed += 1
+        else:
+            # Stdin/stdout problem
+            success, output = run_code_safe(code, test_input, timeout)
+            if success and compare_outputs(output, expected):
+                passed += 1
 
     return passed, total
 
@@ -176,17 +313,23 @@ def evaluate(args) -> dict:
     problems = load_livecode(args.data_dir)
     print(f"[livecode] loaded {len(problems)} problems")
 
+    # Count problem types
+    n_stdin = sum(1 for p in problems if not p.get("fn_name"))
+    n_func = sum(1 for p in problems if p.get("fn_name"))
+    print(f"[livecode] {n_stdin} stdin/stdout problems, {n_func} function-call problems")
+
     llm = load_model(args.model, args.adapter)
 
-    # Build prompts
+    # Build prompts — different templates for stdin vs function-call problems
     prompts = []
     for p in problems:
-        prompt = LIVECODE_PROMPT_TEMPLATE.format(
-            problem_description=p["description"],
-            input_format=f"Input format: {p['input_format']}" if p["input_format"] else "",
-            output_format=f"Output format: {p['output_format']}" if p["output_format"] else "",
-            constraints=f"Constraints: {p['constraints']}" if p["constraints"] else "",
-        )
+        if p.get("fn_name") and p.get("starter_code"):
+            prompt = FUNCTION_PROMPT.format(
+                problem_description=p["description"],
+                starter_code=p["starter_code"],
+            )
+        else:
+            prompt = STDIN_PROMPT.format(problem_description=p["description"])
         prompts.append(prompt)
 
     # Generate
@@ -234,7 +377,8 @@ def evaluate(args) -> dict:
             })
             continue
 
-        passed, total = check_test_cases(code, test_cases)
+        fn_name = problem.get("fn_name")
+        passed, total = check_test_cases(code, test_cases, fn_name=fn_name)
         is_correct = passed == total and total > 0
 
         if is_correct:
@@ -254,6 +398,7 @@ def evaluate(args) -> dict:
             "tests_passed": passed,
             "tests_total": total,
             "difficulty": diff,
+            "problem_type": "function_call" if fn_name else "stdin",
         })
 
     pass_at_1 = correct / total_with_tests if total_with_tests > 0 else 0

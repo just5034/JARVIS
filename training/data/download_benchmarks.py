@@ -191,6 +191,8 @@ def download_livecode(output_dir: Path) -> int:
             "title": row.get("question_title", row.get("title", "")),
             "description": row.get("question_content", row.get("description", "")),
             "difficulty": row.get("difficulty", "unknown"),
+            "starter_code": row.get("starter_code", ""),
+            "fn_name": row.get("fn_name", None),
             "input_format": row.get("input_format", ""),
             "output_format": row.get("output_format", ""),
             "constraints": row.get("constraints", ""),
