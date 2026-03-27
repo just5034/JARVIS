@@ -68,3 +68,17 @@ try:
 
 except FileNotFoundError:
     print(f"No eval results found at {EVAL_PATH}")
+
+# Show functional test case samples
+print("\n--- Functional test case samples ---")
+count = 0
+for p in problems:
+    tc = p.get("test_cases", [])
+    if tc and tc[0].get("testtype") == "functional":
+        print(f"Problem: {p.get('id','?')} | {p.get('title','')[:40]}")
+        print(f"  starter_code: '{p.get('starter_code','')[:100]}'")
+        print(f"  test[0]: {json.dumps(tc[0])[:300]}")
+        print()
+        count += 1
+        if count >= 3:
+            break
