@@ -164,6 +164,25 @@ def extract_python_code(text: str) -> str | None:
     return None
 
 
+def get_problem_type(problem: dict) -> str:
+    """Determine if a problem is stdin or functional based on test case metadata."""
+    test_cases = problem.get("test_cases", [])
+    if test_cases and isinstance(test_cases[0], dict):
+        return test_cases[0].get("testtype", "stdin")
+    return "stdin"
+
+
+def extract_fn_name(starter_code: str) -> str | None:
+    """Extract the method name from LeetCode-style starter code.
+
+    Example: 'class Solution:\\n    def countSeniors(self, ...' -> 'countSeniors'
+    """
+    match = re.search(r"def\s+(\w+)\s*\(\s*self", starter_code)
+    if match:
+        return match.group(1)
+    return None
+
+
 def compare_outputs(actual: str, expected: str) -> bool:
     """Compare outputs with Decimal numeric fallback (matches official harness)."""
     actual_lines = actual.strip().splitlines()
@@ -219,24 +238,30 @@ def run_code_safe(code: str, stdin: str, timeout: int = 30) -> tuple[bool, str]:
 
 
 def run_function_call(code: str, fn_name: str, test_input: str, timeout: int = 30) -> tuple[bool, str]:
-    """Run a function-call style problem (LeetCode) by calling the function directly."""
-    # Parse the test input as JSON arguments
-    try:
-        args = json.loads(test_input)
-        if not isinstance(args, list):
-            args = [args]
-    except (json.JSONDecodeError, TypeError):
-        args = [test_input]
+    """Run a function-call style problem (LeetCode) by calling the function directly.
 
-    # Build a wrapper that imports the code and calls the function
+    Test inputs may be multi-line, where each line is a separate argument:
+      e.g., "[12, 9]\\n1" -> two args: [12, 9] and 1
+    """
+    # Parse each line as a separate JSON argument
+    args = []
+    for line in test_input.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            args.append(json.loads(line))
+        except (json.JSONDecodeError, TypeError):
+            args.append(line)
+
     args_repr = ", ".join(repr(a) for a in args)
     wrapper = f"""{PREIMPORT_BLOCK}
+import json
+
 {code}
 
-# Call the function
 _sol = Solution()
 _result = _sol.{fn_name}({args_repr})
-# Convert tuples to lists for comparison (matches official harness)
 if isinstance(_result, tuple):
     _result = list(_result)
 print(json.dumps(_result))
@@ -313,9 +338,9 @@ def evaluate(args) -> dict:
     problems = load_livecode(args.data_dir)
     print(f"[livecode] loaded {len(problems)} problems")
 
-    # Count problem types
-    n_stdin = sum(1 for p in problems if not p.get("fn_name"))
-    n_func = sum(1 for p in problems if p.get("fn_name"))
+    # Count problem types using testtype field
+    n_stdin = sum(1 for p in problems if get_problem_type(p) == "stdin")
+    n_func = sum(1 for p in problems if get_problem_type(p) == "functional")
     print(f"[livecode] {n_stdin} stdin/stdout problems, {n_func} function-call problems")
 
     llm = load_model(args.model, args.adapter)
@@ -323,10 +348,12 @@ def evaluate(args) -> dict:
     # Build prompts — different templates for stdin vs function-call problems
     prompts = []
     for p in problems:
-        if p.get("fn_name") and p.get("starter_code"):
+        ptype = get_problem_type(p)
+        starter = p.get("starter_code", "")
+        if ptype == "functional" and starter:
             prompt = FUNCTION_PROMPT.format(
                 problem_description=p["description"],
-                starter_code=p["starter_code"],
+                starter_code=starter,
             )
         else:
             prompt = STDIN_PROMPT.format(problem_description=p["description"])
@@ -377,7 +404,12 @@ def evaluate(args) -> dict:
             })
             continue
 
-        fn_name = problem.get("fn_name")
+        # Determine problem type and function name
+        ptype = get_problem_type(problem)
+        fn_name = None
+        if ptype == "functional":
+            fn_name = extract_fn_name(problem.get("starter_code", ""))
+
         passed, total = check_test_cases(code, test_cases, fn_name=fn_name)
         is_correct = passed == total and total > 0
 
