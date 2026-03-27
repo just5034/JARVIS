@@ -26,16 +26,14 @@ from training.eval.base import (
 )
 
 
-GPQA_PROMPT_TEMPLATE = """Answer the following graduate-level science question. Think through the problem carefully, then provide your final answer as a single letter (A, B, C, or D).
+GPQA_PROMPT_TEMPLATE = """Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering.
 
-Question: {question}
+{question}
 
 (A) {choice_a}
 (B) {choice_b}
 (C) {choice_c}
-(D) {choice_d}
-
-Think step by step, then state your final answer."""
+(D) {choice_d}"""
 
 
 def load_gpqa_diamond(data_dir: str) -> list[dict]:

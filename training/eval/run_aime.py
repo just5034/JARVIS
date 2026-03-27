@@ -28,7 +28,7 @@ AIME_PROMPT_TEMPLATE = """Solve the following AIME competition math problem. The
 
 Problem: {problem}
 
-Think step by step. Show your full work, then give your final answer as a single integer."""
+Think step by step. Show your full work, then put your final answer in \\boxed{{}} format."""
 
 
 def load_aime_2024(data_dir: str) -> list[dict]:

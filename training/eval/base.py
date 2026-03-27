@@ -149,22 +149,25 @@ def extract_boxed_answer(text: str) -> str | None:
 
 
 def extract_choice(text: str) -> str | None:
-    """Extract multiple choice answer (A/B/C/D) from model output."""
-    # Look for explicit "The answer is (X)" patterns first
-    patterns = [
-        r"[Tt]he\s+answer\s+is\s*[:\s]*\(?([A-D])\)?",
-        r"[Aa]nswer\s*[:\s]+\(?([A-D])\)?",
-        r"\b([A-D])\s*\)?\s*$",  # letter at end of response
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            return match.group(1).upper()
+    """Extract multiple choice answer (A/B/C/D) from model output.
 
-    # Fallback: find the last standalone A/B/C/D
-    matches = re.findall(r"\b([A-D])\b", text)
-    if matches:
-        return matches[-1].upper()
+    Matches the standard OpenAI simple-evals format: 'Answer: $LETTER'
+    """
+    # Primary: look for "Answer: X" pattern (standard format)
+    match = re.search(r"(?i)Answer\s*:\s*\$?([A-D])\$?", text)
+    if match:
+        return match.group(1).upper()
+
+    # Secondary: "The answer is (X)" patterns
+    match = re.search(r"[Tt]he\s+answer\s+is\s*[:\s]*\(?([A-D])\)?", text)
+    if match:
+        return match.group(1).upper()
+
+    # Tertiary: letter at end of response (last line)
+    last_line = text.strip().split("\n")[-1]
+    match = re.search(r"\b([A-D])\b", last_line)
+    if match:
+        return match.group(1).upper()
 
     return None
 
