@@ -1,28 +1,27 @@
 #!/usr/bin/env bash
-# Phase 4A: Generate physics reasoning traces using full DeepSeek R1-0528
-# on H200 GPUs via vLLM tensor parallelism.
+# Phase 4A: Self-distillation — generate physics reasoning traces
+# using R1-Distill-Qwen-32B as its own teacher on A100 GPUs.
 #
-# This runs R1-0528 (W4A16 quantized, ~346GB VRAM) on 4× H200 GPUs,
-# serves it via vLLM, and generates reasoning traces for physics problems.
+# Generates 8 traces per problem (866 problems × 8 = ~6,928 traces).
+# After generation, runs rejection sampling to filter to best traces.
 #
-# Budget: ~600-900 SU (4 GPUs × 50-75 hrs × 3 SU/GPU-hr)
+# Budget: ~200-350 SU (4 GPUs × 50-90 hrs × 1 SU/GPU-hr)
 #
 # Prerequisites:
-#   - Model downloaded: /scratch/bgde/jhill5/models/deepseek-r1-0528-w4a16
+#   - Model: /projects/bgde/jhill5/models/r1-distill-qwen-32b
 #   - Physics problems: /scratch/bgde/jhill5/data/physics_problems.jsonl
-#   - Venv: /scratch/bgde/jhill5/jarvis-venv
 #
 # Usage:
 #   sbatch scripts/run_trace_generation.sh
 
 #SBATCH --job-name=jarvis-traces
 #SBATCH --account=bgde-delta-gpu
-#SBATCH --partition=gpuH200x8
+#SBATCH --partition=gpuA100x4
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=64
-#SBATCH --mem=400G
+#SBATCH --mem=240G
 #SBATCH --time=72:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
@@ -43,16 +42,17 @@ export TMPDIR=/tmp
 export HF_HOME=/scratch/bgde/jhill5/hf_cache
 
 # ─── Paths ───
-TEACHER_MODEL="/scratch/bgde/jhill5/models/deepseek-r1-0528-w4a16"
+TEACHER_MODEL="/projects/bgde/jhill5/models/r1-distill-qwen-32b"
 PROBLEMS="/scratch/bgde/jhill5/data/physics_problems.jsonl"
 OUTPUT_DIR="/scratch/bgde/jhill5/data/physics_traces"
 VLLM_PORT=8192
 
-echo "=== JARVIS Phase 4A: Trace Generation (H200) ==="
+echo "=== JARVIS Phase 4A: Self-Distillation Trace Generation ==="
 echo "Job ID:  $SLURM_JOB_ID"
 echo "Node:    $(hostname)"
 echo "GPUs:    $(nvidia-smi -L | wc -l)"
 echo "Model:   $TEACHER_MODEL"
+echo "Problems: $(wc -l < $PROBLEMS) problems"
 echo "Date:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
 
@@ -64,7 +64,6 @@ fi
 
 if [ ! -f "$PROBLEMS" ]; then
     echo "ERROR: physics problems not found at $PROBLEMS"
-    echo "Run: python -m training.data.build_physics_problems first"
     exit 1
 fi
 
@@ -75,9 +74,8 @@ echo "Starting vLLM server with tensor parallelism=4..."
 python -m vllm.entrypoints.openai.api_server \
     --model "$TEACHER_MODEL" \
     --tensor-parallel-size 4 \
-    --quantization compressed-tensors \
-    --dtype float16 \
-    --max-model-len 16384 \
+    --dtype bfloat16 \
+    --max-model-len 32768 \
     --port $VLLM_PORT \
     --disable-log-requests \
     &
@@ -87,7 +85,7 @@ VLLM_PID=$!
 echo "Waiting for vLLM server to start..."
 for i in $(seq 1 120); do
     if curl -s http://localhost:$VLLM_PORT/health > /dev/null 2>&1; then
-        echo "  vLLM server ready after ${i}s"
+        echo "  vLLM server ready after $((i * 5))s"
         break
     fi
     if ! kill -0 $VLLM_PID 2>/dev/null; then
@@ -105,15 +103,15 @@ if ! curl -s http://localhost:$VLLM_PORT/health > /dev/null 2>&1; then
 fi
 
 echo ""
-echo "=== Generating traces ==="
-python -m training.physics.generate_traces_api \
+echo "=== Generating traces (8 per problem) ==="
+python training/physics/generate_traces_api.py \
     --problems "$PROBLEMS" \
     --output "$OUTPUT_DIR" \
     --model "$TEACHER_MODEL" \
     --api-base "http://localhost:$VLLM_PORT/v1" \
     --api-key "dummy" \
     --traces-per-problem 8 \
-    --max-tokens 8192 \
+    --max-tokens 16384 \
     --temperature 0.7 \
     --workers 8 \
     --resume
@@ -129,12 +127,13 @@ wait $VLLM_PID 2>/dev/null
 # ─── Run rejection sampling ───
 echo ""
 echo "=== Running rejection sampling ==="
-python -m training.physics.rejection_sample \
+python training/physics/rejection_sample.py \
     --traces "$OUTPUT_DIR/traces.jsonl" \
-    --output "/scratch/bgde/jhill5/data/physics_filtered_100k.jsonl" \
-    --target-count 100000 \
+    --output "/scratch/bgde/jhill5/data/physics_filtered.jsonl" \
+    --target-count 5000 \
     --require-correct
 
 echo ""
 echo "=== Phase 4A Complete ==="
-echo "Filtered traces: /scratch/bgde/jhill5/data/physics_filtered_100k.jsonl"
+echo "Raw traces: $OUTPUT_DIR/traces.jsonl"
+echo "Filtered traces: /scratch/bgde/jhill5/data/physics_filtered.jsonl"
