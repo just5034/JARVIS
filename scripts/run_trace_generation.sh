@@ -22,7 +22,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=240G
-#SBATCH --time=72:00:00
+#SBATCH --time=48:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
 #SBATCH --output=/scratch/bgde/jhill5/logs/traces-%j.out
