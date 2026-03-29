@@ -128,7 +128,7 @@ python training/physics/generate_traces_api.py \
     --api-base "http://localhost:$VLLM_PORT/v1" \
     --api-key "dummy" \
     --traces-per-problem 8 \
-    --max-tokens 8192 \
+    --max-tokens 16384 \
     --temperature 0.7 \
     --workers 8 \
     --resume
