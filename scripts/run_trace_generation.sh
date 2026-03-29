@@ -91,7 +91,7 @@ python -m vllm.entrypoints.openai.api_server \
     --max-model-len 16384 \
     --gpu-memory-utilization 0.90 \
     --port $VLLM_PORT \
-    --disable-log-requests \
+    --no-enable-log-requests \
     > "$VLLM_LOG" 2>&1 &
 VLLM_PID=$!
 
