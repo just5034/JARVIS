@@ -88,7 +88,7 @@ python -m vllm.entrypoints.openai.api_server \
     --model "$TEACHER_MODEL" \
     --tensor-parallel-size 4 \
     --dtype bfloat16 \
-    --max-model-len 16384 \
+    --max-model-len 32768 \
     --gpu-memory-utilization 0.90 \
     --port $VLLM_PORT \
     --no-enable-log-requests \
@@ -128,7 +128,7 @@ python training/physics/generate_traces_api.py \
     --api-base "http://localhost:$VLLM_PORT/v1" \
     --api-key "dummy" \
     --traces-per-problem 8 \
-    --max-tokens 16384 \
+    --max-tokens 8192 \
     --temperature 0.7 \
     --workers 8 \
     --resume
