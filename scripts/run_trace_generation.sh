@@ -95,15 +95,18 @@ python -m vllm.entrypoints.openai.api_server \
     > "$VLLM_LOG" 2>&1 &
 VLLM_PID=$!
 
-# Wait for server to be ready
+# Wait for server to be ready (up to 30 min — vLLM import ~6min, model load ~2min, KV cache + compile ~5min)
 echo "Waiting for vLLM server to start..."
-for i in $(seq 1 120); do
+for i in $(seq 1 360); do
     if curl -s http://localhost:$VLLM_PORT/health > /dev/null 2>&1; then
         echo "  vLLM server ready after $((i * 5))s"
         break
     fi
     if ! kill -0 $VLLM_PID 2>/dev/null; then
         echo "ERROR: vLLM server died during startup"
+        echo "=== Last 50 lines of vLLM log ==="
+        tail -50 "$VLLM_LOG"
+        echo "=== End vLLM log ==="
         exit 1
     fi
     sleep 5
@@ -111,7 +114,7 @@ done
 
 # Verify server is up
 if ! curl -s http://localhost:$VLLM_PORT/health > /dev/null 2>&1; then
-    echo "ERROR: vLLM server failed to start after 600s"
+    echo "ERROR: vLLM server failed to start after 1800s"
     echo "=== Last 100 lines of vLLM log ==="
     tail -100 "$VLLM_LOG"
     echo "=== End vLLM log ==="
