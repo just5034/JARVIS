@@ -40,6 +40,10 @@ source "$VENV/bin/activate"
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 export TMPDIR=/tmp
 export HF_HOME=/scratch/bgde/jhill5/hf_cache
+export PYTHONUNBUFFERED=1
+export NCCL_DEBUG=INFO
+export NCCL_SOCKET_IFNAME=hsn
+export VLLM_LOGGING_LEVEL=DEBUG
 
 # ─── Paths ───
 TEACHER_MODEL="/projects/bgde/jhill5/models/r1-distill-qwen-32b"
@@ -69,16 +73,26 @@ fi
 
 mkdir -p "$OUTPUT_DIR" /scratch/bgde/jhill5/logs
 
+# ─── Sanity checks ───
+echo "Python: $(which python)"
+echo "vLLM version: $(python -c 'import vllm; print(vllm.__version__)')"
+echo "PyTorch version: $(python -c 'import torch; print(torch.__version__); print("CUDA:", torch.cuda.is_available(), torch.cuda.device_count(), "GPUs")')"
+nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader
+echo ""
+
 # ─── Start vLLM server in background ───
+VLLM_LOG="/scratch/bgde/jhill5/logs/vllm-${SLURM_JOB_ID}.log"
 echo "Starting vLLM server with tensor parallelism=4..."
+echo "vLLM log: $VLLM_LOG"
 python -m vllm.entrypoints.openai.api_server \
     --model "$TEACHER_MODEL" \
     --tensor-parallel-size 4 \
     --dtype bfloat16 \
-    --max-model-len 32768 \
+    --max-model-len 16384 \
+    --gpu-memory-utilization 0.90 \
     --port $VLLM_PORT \
     --disable-log-requests \
-    &
+    > "$VLLM_LOG" 2>&1 &
 VLLM_PID=$!
 
 # Wait for server to be ready
@@ -98,6 +112,9 @@ done
 # Verify server is up
 if ! curl -s http://localhost:$VLLM_PORT/health > /dev/null 2>&1; then
     echo "ERROR: vLLM server failed to start after 600s"
+    echo "=== Last 100 lines of vLLM log ==="
+    tail -100 "$VLLM_LOG"
+    echo "=== End vLLM log ==="
     kill $VLLM_PID 2>/dev/null
     exit 1
 fi
