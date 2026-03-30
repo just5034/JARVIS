@@ -87,7 +87,11 @@ class TraceDataset(Dataset):
         if reasoning:
             full_response = f"<think>\n{reasoning}\n</think>\n\n{trace}"
         else:
-            full_response = trace
+            # vLLM sometimes strips the opening <think> tag from R1 models
+            if "</think>" in trace and "<think>" not in trace:
+                full_response = f"<think>\n{trace}"
+            else:
+                full_response = trace
 
         # Build chat format
         messages = [
