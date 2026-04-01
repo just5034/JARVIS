@@ -1,61 +1,24 @@
 base_models:
-  r1_distill_qwen_32b:
-    model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-    architecture: "qwen2.5"
-    path: "/models/brains/r1-distill-qwen-32b"
-    size_gb: 16.0
+  qwen35_27b:
+    model_id: "Qwen/Qwen3.5-27B"
+    architecture: "qwen3.5"
+    path: "/models/brains/qwen3.5-27b"
+    size_gb: 14.0
     quantization: "nvfp4"
-    context_length: 131072
-    recommended_max_context: 32768
+    context_length: 262144
+    recommended_max_context: 131072
     load_policy: "always_resident"
-    roles: ["physics", "math"]
-
-  qwen25_coder_32b:
-    model_id: "Qwen/Qwen2.5-Coder-32B-Instruct"
-    architecture: "qwen2.5"
-    path: "/models/brains/qwen2.5-coder-32b-instruct"
-    size_gb: 16.0
-    quantization: "nvfp4"
-    context_length: 131072
-    recommended_max_context: 32768
-    load_policy: "always_resident"
-    roles: ["code"]
-
-  r1_distill_llama_70b:
-    model_id: "deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
-    architecture: "llama3.3"
-    path: "/models/brains/r1-distill-llama-70b"
-    size_gb: 35.0
-    quantization: "nvfp4"
-    context_length: 131072
-    recommended_max_context: 32768
-    load_policy: "optional"
-    roles: ["math"]
+    roles: ["physics", "math", "code", "general"]
 
 lora_adapters:
-  physics_general:
-    base_model: "r1_distill_qwen_32b"
-    path: "/models/adapters/physics_general"
+  hep_physics:
+    base_model: "qwen35_27b"
+    path: "/models/adapters/hep_physics"
     size_gb: 0.3
 
-  physics_hep:
-    base_model: "r1_distill_qwen_32b"
-    path: "/models/adapters/physics_hep"
-    size_gb: 0.3
-
-  math_adapter:
-    base_model: "r1_distill_qwen_32b"
-    path: "/models/adapters/math_adapter"
-    size_gb: 0.3
-
-  code_general:
-    base_model: "qwen25_coder_32b"
-    path: "/models/adapters/code_general"
-    size_gb: 0.3
-
-  code_hep:
-    base_model: "qwen25_coder_32b"
-    path: "/models/adapters/code_hep"
+  hep_code:
+    base_model: "qwen35_27b"
+    path: "/models/adapters/hep_code"
     size_gb: 0.3
 
 infrastructure:
@@ -72,10 +35,11 @@ infrastructure:
     load_policy: "always_resident"
 
   draft_model:
-    model_id: "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+    model_id: "Qwen/Qwen3.5-1.5B"
     path: "/models/infrastructure/draft-model"
     size_gb: 0.8
     load_policy: "always_resident"
+    note: "Must match Qwen3.5 architecture for speculative decoding. Verify availability on HuggingFace."
 
   rag_embedding:
     model_id: "sentence-transformers/all-MiniLM-L6-v2"

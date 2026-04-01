@@ -2,191 +2,122 @@
 
 ## Phase Overview
 
-| Phase | Name | Goal | Dependencies |
-|-------|------|------|-------------|
-| 0 | Scaffold | Project skeleton, configs, tests | None |
-| 1 | Inference MVP | Single-model serving with OpenAI API | Phase 0 |
-| 2 | Router + Multi-Brain | Route queries to correct brain, LoRA swapping | Phase 1 |
-| 3 | Inference Amplification | Best-of-N, verification, budget forcing | Phase 2 |
-| 4 | Training (Delta) | Train physics + code brains on ACCESS-CI | Phases 0-2 (can overlap with 3) |
-| 5 | Specialist Ecosystem | On-demand specialist loading, non-text models | Phase 2 |
-| 6 | RAG + Knowledge | Physics knowledge base with FAISS retrieval | Phase 2 |
-| 7 | GRACE Integration | End-to-end HEP agent with JARVIS backend | Phases 2-3 |
-| 8 | Optimization | Memory tuning, speed profiling, production hardening | All prior phases |
+| Phase | Name | Goal | Status |
+|-------|------|------|--------|
+| 0 | Scaffold | Project skeleton, configs, tests | **Complete** |
+| 1 | Inference MVP | Single-model serving with OpenAI API | **Complete** |
+| 2 | Router + Multi-Brain | Route queries by domain/difficulty, LoRA swapping | **Complete** |
+| 3 | Inference Amplification | Best-of-N, verification, budget forcing | **Complete** |
+| 4 | Training (Delta) | ~~Train physics + code brains~~ → HEP LoRA only | **Pivoted** |
+| 5 | Specialist Ecosystem | On-demand specialist loading, non-text models | **Complete** |
+| 6 | RAG + Knowledge | Physics knowledge base with FAISS retrieval | **Complete** |
+| 4M | Model Migration | Migrate from dual 32B bases to Qwen3.5-27B | **New — Not Started** |
+| 7 | GRACE Integration | End-to-end HEP agent with JARVIS backend | Not Started |
+| 8 | Optimization | Memory tuning, speed profiling, production hardening | Not Started |
 
 ---
 
-## Phase 0: Scaffold
+## Phase 0: Scaffold — COMPLETE
 
 **Goal:** Set up project structure, configs, and test harness.
-
-**Tasks:**
-- [ ] Initialize Git repo with project structure per `claude.md`
-- [ ] Create `configs/models.yaml` with all model entries (paths, sizes, quantization)
-- [ ] Create `configs/inference.yaml` with difficulty-level settings
-- [ ] Create `configs/router.yaml` with domain labels and thresholds
-- [ ] Write `scripts/download_models.sh` to fetch all required model weights from HuggingFace
-- [ ] Set up Python environment (`pyproject.toml` or `requirements.txt`) — key deps: `fastapi`, `uvicorn`, `vllm`, `transformers`, `peft`, `faiss-cpu`, `torch`
-- [ ] Write basic test skeleton in `tests/`
-- [ ] Write Dockerfile for the JARVIS server
 
 **Milestone:** `python -m jarvis --help` runs without errors. All configs parse correctly.
 
 ---
 
-## Phase 1: Inference MVP
+## Phase 1: Inference MVP — COMPLETE
 
-**Goal:** Serve a single model (Qwen-32B or any available model) behind an OpenAI-compatible API.
+**Goal:** Serve a single model behind an OpenAI-compatible API.
 
-**Tasks:**
-- [ ] Implement `src/api/server.py` — FastAPI app with `/v1/chat/completions`, `/v1/models`, `/health`
-- [ ] Implement `src/brains/model_loader.py` — Load a single model via vLLM or TensorRT-LLM
-- [ ] Support both streaming (SSE) and non-streaming responses
-- [ ] Support `temperature`, `max_tokens`, `top_p`, `stop` parameters
-- [ ] Implement memory tracking (`/admin/memory` endpoint)
-- [ ] Test with a small model first (Qwen-2.5-7B or similar) before scaling to 32B
-- [ ] Verify GRACE can connect and issue queries successfully
-
-**Milestone:** `curl -X POST localhost:8000/v1/chat/completions -d '{"messages":[{"role":"user","content":"Hello"}]}'` returns a valid response. GRACE can use JARVIS as a drop-in replacement for OpenAI API.
+**Milestone:** `curl -X POST localhost:8000/v1/chat/completions` returns a valid response.
 
 ---
 
-## Phase 2: Router + Multi-Brain
+## Phase 2: Router + Multi-Brain — COMPLETE
 
 **Goal:** Classify incoming queries and route to the correct brain with LoRA adapter swapping.
 
-**Tasks:**
-- [ ] Implement `src/router/domain_classifier.py` — BERT-based domain classifier
-- [ ] Implement `src/router/difficulty_estimator.py` — BERT-based difficulty classifier
-- [ ] Create training data for router classifiers:
-  - Collect/label ~5K examples each for math, physics, code domains
-  - Generate difficulty labels by running base model on validation problems
-- [ ] Train both classifiers (fine-tune `bert-base-uncased`)
-- [ ] Implement `src/brains/adapter_manager.py` — LoRA adapter hot-swapping
-  - Load base Qwen-32B once
-  - Swap LoRA adapters in milliseconds based on router output
-  - Track which adapter is currently active
-- [ ] Implement memory-aware loading logic — refuse to load if budget exceeded
-- [ ] Add HEP subdomain detection for physics/code queries
-- [ ] Integration test: send math, physics, and code queries → verify correct brain handles each
-
-**Milestone:** Queries are visibly routed to different brains. `/health` endpoint shows which adapter is active. Math queries go to math brain, physics to physics brain, code to code brain.
-
-**Note:** For initial development, use off-the-shelf models without custom training. Physics brain = base R1-Distill-Qwen-32B (no adapter), Code brain = same base (no adapter), Math brain = same or R1-Distill-Llama-70B. Custom-trained adapters come in Phase 4.
+**Milestone:** Queries are visibly routed to different domains. `/health` shows active configuration.
 
 ---
 
-## Phase 3: Inference Amplification
+## Phase 3: Inference Amplification — COMPLETE
 
 **Goal:** Implement the full difficulty-aware inference pipeline.
 
+**Milestone:** Hard physics query → generates 16 candidates → ThinkPRM scores each → budget forcing applied → best solution returned.
+
+---
+
+## Phase 4: Training on Delta — PIVOTED
+
+**Original Goal:** Train custom physics and code brains on NCSA Delta using 8,000 SUs.
+
+**Pivot (2026-04-01):** Qwen3.5-27B (released Feb 2026) exceeds ALL original training targets out-of-the-box:
+- GPQA Diamond: 86% (target was 78%)
+- LiveCodeBench: 80.7% (target was 65%)
+- AIME: 81% (target was 87%, close — inference amplification covers the gap)
+
+**Phase 4A (trace generation) completed** — 5,000 filtered traces from R1-Distill-Qwen-32B. These are for the OLD base model and will not be used for Qwen3.5-27B.
+
+**Phase 4B (SFT) job cancelled** — was training adapter for deprecated R1-Distill-Qwen-32B.
+
+**New Phase 4 scope (HEP LoRA only):**
+- [ ] **4A-new: HEP Data Curation (~50 SU)** — Curate HEP physics + HEP code training data from GRACE tool implementations, HEP repos, and existing traces
+- [ ] **4B-new: HEP Physics LoRA (~200 SU)** — QDoRA on Qwen3.5-27B with HEP physics data (particle physics, detector design, scintillator properties, kinematics)
+- [ ] **4C-new: HEP Code LoRA (~200 SU)** — QDoRA on Qwen3.5-27B with HEP code data (Geant4, ROOT, Pythia8, GDML patterns)
+- [ ] **4D-new: General GRPO (optional, ~2,000-3,000 SU)** — RL with verifiable rewards to push general reasoning/coding even higher. Only if baseline evals show room for improvement worth the SU cost.
+- [ ] **4E-new: Router Retrain (~50 SU)** — Retrain difficulty classifier using Qwen3.5-27B performance on validation set
+
+**Revised Budget:**
+| Phase | SUs | Purpose |
+|-------|-----|---------|
+| 4A-new | 50 | HEP data curation |
+| 4B-new | 200 | HEP physics LoRA |
+| 4C-new | 200 | HEP code LoRA |
+| 4D-new | 2,000-3,000 | General GRPO (optional) |
+| 4E-new | 50 | Router retrain |
+| Buffer | ~4,500-5,500 | Future training, new adapters |
+| **Spent** | **~76** | Phase 4A traces (old model) |
+
+---
+
+## Phase 4M: Model Migration — NEW
+
+**Goal:** Migrate from dual-base (R1-Distill-Qwen-32B + Qwen2.5-Coder-32B-Instruct) to single Qwen3.5-27B.
+
 **Tasks:**
-- [ ] Implement `src/inference/engine.py` — orchestrates strategy selection per difficulty
-- [ ] Implement `src/inference/sampling.py` — best-of-N generation with parallel sampling
-- [ ] Implement `src/inference/voting.py` — self-consistency majority voting with answer extraction
-- [ ] Implement `src/inference/verification.py` — ThinkPRM scoring + pessimistic selection
-  - Load ThinkPRM 1.5B as always-resident verifier
-  - Score each candidate's reasoning chain
-  - Select solution with least uncertainty (pessimistic verification)
-- [ ] Implement `src/inference/budget_forcing.py` — "Wait" trick for hard queries
-  - Monitor output for premature conclusion tokens
-  - Append "Wait" up to 3 times to force continued reasoning
-- [ ] Implement `src/inference/verification_chain.py` — append self-check prompts for medium/hard
-- [ ] Implement `src/inference/speculative.py` — speculative decoding with 1.5B draft model
-- [ ] Implement `src/inference/code_verifier.py` — S* execution-based verification for code brain
-  - Sandboxed Python executor (Docker container)
-  - Generate distinguishing test inputs
-  - Execute candidates, select by correct behavior
-- [ ] Implement `src/inference/context_manager.py` — KV cache management
-  - Enable FP8 KV cache quantization by default (`kv_cache_dtype="fp8"`)
-  - Integrate KVQuant/AQUA-KV for 2-bit KV on hard queries (run one-time calibration)
-  - Configure SSD offload path for KV cache pages (`/tmp/kv_cache` on DGX Spark NVMe)
-  - Track KV cache memory usage per active inference
-  - Dynamically select context limits based on difficulty level and sampling strategy
-  - Implement context compression for long multi-turn GRACE workflows
-- [ ] Wire difficulty level from router → inference engine strategy selection
-- [ ] Configurable via `configs/inference.yaml`
+- [ ] Cancel SFT job 17177608 on Delta
+- [ ] Download Qwen3.5-27B to Delta (`/projects/bgde/jhill5/models/qwen3.5-27b`)
+- [ ] Verify vLLM compatibility with Qwen3.5 architecture
+- [ ] Run baseline evals (GPQA, AIME, LiveCodeBench) to confirm published numbers
+- [ ] Update `configs/models.yaml` — single base model entry
+- [ ] Update `configs/router.yaml` — remove domain→brain mapping, keep domain classification for specialist/RAG/HEP dispatch
+- [ ] Update `configs/deployment.yaml` — single-base memory layout
+- [ ] Simplify `src/jarvis/brains/brain_manager.py` — one always-resident base, remove multi-brain resolution
+- [ ] Verify ThinkPRM works with Qwen3.5's reasoning format (`<think>` tags)
+- [ ] Verify budget forcing conclusion markers match Qwen3.5 output patterns
+- [ ] Find compatible draft model for speculative decoding (Qwen3.5-1.5B or similar)
+- [ ] Update tests to reflect single-base architecture
+- [ ] Update all docs (ARCHITECTURE.md, MODELS.md, DEPLOYMENT.md, TRAINING_PIPELINE.md)
 
-**Milestone:** Hard physics query → generates 16 candidates → ThinkPRM scores each → budget forcing applied → best solution returned. Hard code query → S* verification with execution. Easy queries still fast (single pass).
+**Milestone:** All 142+ tests pass with Qwen3.5-27B as sole base model. Baseline evals confirm published benchmarks.
 
 ---
 
-## Phase 4: Training on Delta (ACCESS-CI)
-
-**Goal:** Train custom physics and code brains on NCSA Delta using 8,000 ACCESS-CI SUs.
-
-**This phase runs in parallel with Phases 3, 5, 6 on the deployment side.**
-
-**Subphases:** (See `docs/TRAINING_PIPELINE.md` for full details)
-
-- [ ] **4A: Physics Data Generation (350 SU)**
-  - Multi-teacher trace generation from R1-0528
-  - LADDER curriculum generation
-  - Rejection sampling + quality filtering
-  - Synthetic textbook chapters
-- [ ] **4B: Physics Distillation SFT (800 SU)**
-  - QDoRA (r=32) on R1-Distill-Qwen-32B with 100K traces
-  - Eval on GPQA Diamond → target 68-72%
-- [ ] **4C: Physics Curriculum GRPO (2,000 SU)**
-  - Staged difficulty RL with multi-signal rewards + PRIME
-  - Eval on GPQA Diamond → target 72-78%
-- [ ] **4D: Physics ETTRL Polish (900 SU on H200)**
-  - Test-time RL on 500 hard unlabeled problems
-  - Eval on GPQA Diamond → target 74-80%
-- [ ] **4E: Physics Post-Processing (450 SU)**
-  - POME, checkpoint merging, one self-distillation cycle
-- [ ] **4F: Code AZR Self-Play (2,000 SU)**
-  - Early 32B validation (200 SU from buffer)
-  - Full AZR training if validation passes; GRPO fallback if not
-  - Eval on LiveCodeBench → target 55-65%
-- [ ] **4G: Code Targeted SFT + Post-Processing (600 SU)**
-  - QDoRA on competition problems, POME, merge, self-distillation
-- [ ] **4H: Router Training (200 SU)**
-  - Generate difficulty labels from trained brains
-  - Train domain + difficulty classifiers
-- [ ] **4I: Export trained adapters** → Copy to DGX Spark deployment
-
-**Milestone:** Physics brain GPQA ≥ 78%. Code brain LiveCodeBench ≥ 65%. Math brain AIME ≥ 87% (off-shelf + inference amplification). Adapters exported for deployment.
-
----
-
-## Phase 5: Specialist Ecosystem
+## Phase 5: Specialist Ecosystem — COMPLETE
 
 **Goal:** Enable on-demand loading of domain specialist models.
 
-**Tasks:**
-- [ ] Implement `src/specialists/registry.py` — parse `configs/models.yaml` specialist entries
-- [ ] Implement `src/specialists/loader.py` — on-demand model loading from SSD with LRU eviction
-- [ ] Implement specialist API adapters for non-text models:
-  - [ ] `src/specialists/adapters/esm3.py` — protein sequence/structure input → ESM3 → structured output
-  - [ ] `src/specialists/adapters/evo2.py` — DNA sequence input → Evo 2 → variant/generation output
-  - [ ] `src/specialists/adapters/text_llm.py` — standard chat format (ChemLLM, BioMistral, SaulLM, etc.)
-- [ ] Extend router domain classifier to include specialist domains
-- [ ] Add memory-aware eviction: when loading a new specialist would exceed budget, evict LRU specialist
-- [ ] Integration test: chemistry query → ChemLLM loaded from SSD → response → ChemLLM evicted when physics query arrives
-
-**Milestone:** Send a chemistry question → ChemLLM-7B loads in <10s → correct response. Send a protein sequence → ESM3 returns structure prediction. Memory never exceeds 128GB.
+**Milestone:** Chemistry/protein/DNA queries route to specialist models. Memory never exceeds 128GB.
 
 ---
 
-## Phase 6: RAG Knowledge Base
+## Phase 6: RAG Knowledge Base — COMPLETE
 
 **Goal:** Build and integrate physics/chemistry/biology knowledge retrieval.
 
-**Tasks:**
-- [ ] Curate reference corpus:
-  - Physical constants and equations
-  - Key derivations and proofs
-  - Reaction mechanisms and molecular properties
-  - Unit conversion tables
-  - HEP-specific: cross-sections, PDG data, detector parameters
-- [ ] Embed corpus with `all-MiniLM-L6-v2` into FAISS index
-- [ ] Implement `src/rag/retriever.py` — query embedding + top-K retrieval
-- [ ] Implement `src/rag/augmenter.py` — prepend retrieved passages to prompt
-- [ ] Only activate for physics-domain queries (router signals)
-- [ ] Evaluate RAG impact: run GPQA with and without RAG → measure delta
-
-**Milestone:** Physics query about a specific constant or mechanism → retrieved passage prepended → correct answer that the model would otherwise miss.
+**Milestone:** Physics query about a specific constant or mechanism → retrieved passage prepended → correct answer.
 
 ---
 
@@ -211,8 +142,8 @@
 
 **Tasks:**
 - [ ] Profile memory usage under realistic workloads → identify waste
-- [ ] Tune vLLM/TensorRT-LLM batch settings for DGX Spark's bandwidth characteristics
-- [ ] Implement request queuing for when model swaps are in progress
+- [ ] Tune vLLM batch settings for DGX Spark's bandwidth characteristics
+- [ ] Implement request queuing for when LoRA swaps are in progress
 - [ ] Add logging and monitoring (Prometheus metrics, structured JSON logs)
 - [ ] Implement graceful degradation: if DGX Spark thermal throttles → reduce batch size
 - [ ] Document operational runbook (startup, monitoring, troubleshooting)

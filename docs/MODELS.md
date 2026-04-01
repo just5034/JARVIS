@@ -4,53 +4,42 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 
 ---
 
-## Core Brains
+## Core Brain
 
-### Math Brain
-
-| Field | Value |
-|-------|-------|
-| **Primary** | `deepseek-ai/DeepSeek-R1-Distill-Llama-70B` |
-| **Fallback** | `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` (math LoRA on physics base) |
-| **Parameters** | 70B (primary) / 32B (fallback) |
-| **FP4 Size** | ~35 GB (primary) / ~16 GB shared + 0.3 GB LoRA (fallback) |
-| **Source** | [HuggingFace](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B) |
-| **License** | DeepSeek License (permissive, allows commercial) |
-| **Training** | None — off-the-shelf |
-| **Benchmarks** | MATH-500: 94.5%, AIME 2024: 70.0%, GPQA: 65.2% |
-| **Notes** | With consensus@16 + Heimdall verification, AIME reaches ~87-90% |
-
-### Physics Brain
+### Qwen3.5-27B (Unified Base)
 
 | Field | Value |
 |-------|-------|
-| **Base** | `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B` |
-| **Adapter** | Custom LoRA trained on Delta (physics_general + physics_hep) |
-| **Parameters** | 32B base + LoRA adapters |
-| **FP4 Size** | ~16 GB (Qwen2.5 base, always resident) + 0.3 GB (adapter) |
-| **Source** | Base: [HuggingFace](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B) |
-| **License** | MIT (base model) |
-| **Training** | ~4,200 SU on Delta — distillation SFT + GRPO RL + ETTRL |
-| **Baseline** | GPQA Diamond: 62.1% |
-| **Target** | GPQA Diamond: 78-84% |
-
-### Code Brain
-
-| Field | Value |
-|-------|-------|
-| **Base** | `Qwen/Qwen2.5-Coder-32B-Instruct` |
-| **Adapter** | Custom LoRA trained on Delta (code_hep only — base model already strong at general code) |
-| **Parameters** | 32B base + LoRA adapter |
-| **FP4 Size** | ~16 GB (Qwen2.5-Coder base, always resident) + 0.3 GB (adapter) |
-| **Source** | Base: [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct) |
+| **Model** | `Qwen/Qwen3.5-27B` |
+| **Parameters** | 27B dense |
+| **Architecture** | Qwen3.5 (dense + Gated Delta Networks) |
+| **FP4 Size** | ~14 GB |
+| **Context** | 262K native, extensible to 1M |
+| **Source** | [HuggingFace](https://huggingface.co/Qwen/Qwen3.5-27B) |
 | **License** | Apache 2.0 |
-| **Training** | ~250 SU on Delta — HEP-specific code LoRA only (Geant4, ROOT, Pythia patterns) |
-| **Baseline** | HumanEval: 88.4%, LiveCodeBench: ~40-50% |
-| **Target** | LiveCodeBench: 65%+ (via S* execution verification + HEP LoRA) |
+| **Training** | Optional HEP-specific LoRA (see below) |
+| **Roles** | Physics, Math, Code, General |
+| **Benchmarks** | GPQA Diamond: 86%, AIME 2026: 81%, LiveCodeBench: 80.7% |
+| **Notes** | Single model replaces previous dual-base setup (R1-Distill-Qwen-32B + Qwen2.5-Coder-32B) |
 
-**Two separate bases, same architecture.** Physics uses R1-Distill-Qwen-32B and Code uses Qwen2.5-Coder-32B-Instruct. Both are Qwen2.5 architecture but LoRA adapters are still base-specific (trained on different model weights). Both bases are always resident in memory (~32 GB total at FP4). The math brain uses a LoRA adapter on the physics base, or optionally the separate R1-Distill-Llama-70B for maximum math performance.
+**Why a single base:** Qwen3.5-27B exceeds our original targets across all benchmarks out-of-the-box. A single 14 GB model (FP4) replaces two 16 GB models, freeing ~18 GB of RAM for specialists, KV cache, and longer context. The inference amplification layer (best-of-N, ThinkPRM, S* verification) provides additional accuracy gains on top of the strong baseline.
 
-**Code performance strategy:** Instead of expensive AZR self-play training (original: 2,600 SU), we use a purpose-built code model + S* execution-based verification at inference time. This achieves the same target with 250 SU and redirects 2,350 SU to physics GRPO training.
+### LoRA Adapters (HEP-Specific)
+
+| Adapter | Base Model | Purpose | Size |
+|---------|-----------|---------|------|
+| `hep_physics` | qwen35_27b | Particle physics, detector design, scintillator properties, kinematics | 0.3 GB |
+| `hep_code` | qwen35_27b | Geant4, ROOT, Pythia8, GDML patterns, HEP analysis idioms | 0.3 GB |
+
+These adapters are hot-swapped at runtime when the router detects HEP-specific content. General physics/math/code queries use the base model without any adapter.
+
+### Previous Models (Deprecated)
+
+| Model | Former Role | Replaced By | Reason |
+|-------|------------|-------------|--------|
+| R1-Distill-Qwen-32B | Physics/Math brain | Qwen3.5-27B | Lower GPQA (61% vs 86%), larger footprint |
+| Qwen2.5-Coder-32B-Instruct | Code brain | Qwen3.5-27B | Lower LiveCodeBench (55% vs 81%), larger footprint |
+| R1-Distill-Llama-70B | Math brain (optional) | Qwen3.5-27B | 35 GB footprint for marginal math gain |
 
 ---
 
@@ -63,7 +52,7 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 | **Model** | `bert-base-uncased` (fine-tuned) |
 | **Parameters** | ~110M |
 | **FP4 Size** | ~0.06 GB |
-| **Purpose** | Two classifiers: domain (math/physics/code/specialist) + difficulty (easy/medium/hard) |
+| **Purpose** | Two classifiers: domain (for specialist dispatch, RAG, HEP LoRA) + difficulty (easy/medium/hard for inference strategy) |
 | **Training** | Fine-tuned on ~5K examples/domain + auto-generated difficulty labels |
 
 ### ThinkPRM Verifier
@@ -76,16 +65,17 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 | **Purpose** | Scores reasoning chains for pessimistic verification on hard queries |
 | **Source** | [HuggingFace](https://huggingface.co/PRIME-RL) |
 | **Training** | None — off-the-shelf |
+| **Note** | Verify compatibility with Qwen3.5's reasoning format (`<think>` tags) |
 
 ### Draft Model (Speculative Decoding)
 
 | Field | Value |
 |-------|-------|
-| **Model** | `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` |
+| **Model** | `Qwen/Qwen3.5-1.5B` (TBD — verify availability) |
 | **Parameters** | 1.5B |
 | **FP4 Size** | ~0.8 GB |
-| **Purpose** | Proposes draft tokens for speculative decoding (2-3× throughput) |
-| **Source** | [HuggingFace](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B) |
+| **Purpose** | Proposes draft tokens for speculative decoding (2-3x throughput) |
+| **Note** | Must match Qwen3.5 architecture. If unavailable, fall back to smallest Qwen3.5 variant or disable speculative decoding. |
 
 ### RAG Embedding Model
 
@@ -168,30 +158,16 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 
 ---
 
-## Data Teacher (Training Only — Not Deployed)
-
-### DeepSeek R1-0528
-
-| Field | Value |
-|-------|-------|
-| **Model** | `deepseek-ai/DeepSeek-R1-0528` |
-| **Parameters** | 685B MoE (~37B active) |
-| **Purpose** | Generate training traces for physics brain distillation |
-| **Deployed locally?** | **NO** — 342 GB at FP4, exceeds DGX Spark capacity |
-| **Access method** | API during training on Delta, or quantized inference on H200 cluster |
-| **Benchmarks** | GPQA: 81.0%, AIME 2025: 87.5%, MATH-500: 97.3% |
-| **License** | MIT |
-
----
-
 ## Total Storage Requirements
 
 | Category | Size | Location |
 |----------|------|----------|
-| Core brains (FP4) | ~35-51 GB | SSD (loaded to RAM) |
+| Core brain (FP4) | ~14 GB | SSD (loaded to RAM) |
 | Infrastructure models | ~1.8 GB | SSD (always in RAM) |
 | Specialist models (FP4) | ~11-15 GB | SSD (loaded on demand) |
-| LoRA adapters | ~2 GB | SSD (hot-swapped) |
+| LoRA adapters | ~0.6 GB | SSD (hot-swapped) |
 | RAG FAISS index | ~5 GB | SSD (always in RAM) |
-| **Total model storage** | **~55-75 GB** | |
-| **4 TB SSD capacity** | **4,000 GB** | Room for 50+ additional models |
+| **Total model storage** | **~33-37 GB** | |
+| **4 TB SSD capacity** | **4,000 GB** | Room for 100+ additional models |
+
+**Memory headroom:** With only ~21 GB always-resident (vs ~50 GB previously), the DGX Spark has ~90 GB available for specialists, KV cache, and concurrent inference. This enables longer context windows, more parallel best-of-N candidates, or loading multiple specialists simultaneously.

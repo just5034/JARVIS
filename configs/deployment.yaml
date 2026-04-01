@@ -14,3 +14,30 @@ logging:
   format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 model_dir: "/models"
+
+# Single-base deployment with Qwen3.5-27B
+# ~14 GB base model (FP4) + infrastructure + generous specialist/KV headroom
+deployment:
+  config: "single_base"
+  base_model: "qwen3.5-27b"
+  adapters:
+    - "hep_physics"
+    - "hep_code"
+
+  always_resident:
+    qwen35_27b: 14.0
+    router: 0.06
+    think_prm: 0.8
+    draft_model: 0.8
+    rag_index: 5.0
+    active_lora: 0.3
+    total: 20.96
+
+  available_for_specialists: 90.04  # ~25 specialist 7B models simultaneously
+
+context_window:
+  kv_cache_dtype: "fp8"
+  kv_quant_bits_hard: 2
+  ssd_offload_enabled: true
+  ssd_offload_path: "/tmp/kv_cache"
+  max_model_len: 131072

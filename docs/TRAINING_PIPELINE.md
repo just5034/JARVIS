@@ -1,10 +1,28 @@
 # JARVIS Training Pipeline — NCSA Delta
 
 **Platform:** NCSA Delta (ACCESS-CI allocation)
-**Budget:** 8,000 Service Units (SUs)
+**Budget:** 8,000 Service Units (SUs) — ~76 SU spent, ~7,924 remaining
 **Login:** `ssh login.delta.ncsa.illinois.edu`
 **OS:** RedHat 9 (transitioned late 2025)
 **Docs:** https://docs.ncsa.illinois.edu/systems/delta/
+
+---
+
+## Training Strategy (Revised 2026-04-01)
+
+**Pivot:** Qwen3.5-27B (released Feb 2026) replaces both previous base models (R1-Distill-Qwen-32B and Qwen2.5-Coder-32B-Instruct). It exceeds ALL original training targets out-of-the-box:
+
+| Benchmark | Old Model Baseline | Original Target | Qwen3.5-27B (no training) |
+|-----------|-------------------|-----------------|---------------------------|
+| GPQA Diamond | 61.1% (R1-Distill-32B) | 78% | **86%** |
+| LiveCodeBench | 54.6% (Qwen2.5-Coder-32B) | 65% | **80.7%** |
+| AIME | 63.3% (R1-Distill-32B) | 87% | **81%** |
+
+**Consequence:** The multi-phase training pipeline (SFT → GRPO → ETTRL) for physics and code brains is no longer needed for the general case. Training now focuses on:
+
+1. **HEP-specific LoRA adapters** — Domain knowledge (particle physics, detector design, Geant4/ROOT/Pythia8 code patterns) that no general benchmark measures
+2. **Optional general GRPO** — RL to push reasoning/coding even higher, if baseline evals on Delta confirm room for improvement worth the SU cost
+3. **Router difficulty classifier retrain** — Calibrate difficulty labels against Qwen3.5-27B performance
 
 ---
 
@@ -14,59 +32,52 @@
 
 | Partition | GPUs | GPU Memory | CPU | System RAM | Local SSD | SU Rate | Our Use |
 |-----------|------|-----------|-----|-----------|-----------|---------|---------|
-| `gpuA100x4` | 4× A100 | 40 GB HBM2 each | AMD EPYC 7763 (64-core) | 256 GB | 1.5 TB | 1 SU/GPU-hr | Primary — SFT, GRPO, data gen |
-| `gpuA100x8` | 8× A100 | 40 GB HBM2 each | 2× AMD EPYC 7763 (128-core) | 2 TB | 1.5 TB | 1 SU/GPU-hr | Large runs (8-GPU parallelism) |
-| `gpuH200x8` | 8× H200 | 141 GB HBM3 each | 2× Intel Xeon 8558 | 2 TB | 1.5 TB | 3 SU/GPU-hr | ETTRL only (needs >40GB/GPU) |
+| `gpuA100x4` | 4x A100 | 40 GB HBM2 each | AMD EPYC 7763 (64-core) | 256 GB | 1.5 TB | 1 SU/GPU-hr | Primary — evals, LoRA SFT, data gen |
+| `gpuA100x8` | 8x A100 | 40 GB HBM2 each | 2x AMD EPYC 7763 (128-core) | 2 TB | 1.5 TB | 1 SU/GPU-hr | Large runs (8-GPU parallelism) |
+| `gpuH200x8` | 8x H200 | 141 GB HBM3 each | 2x Intel Xeon 8558 | 2 TB | 1.5 TB | 3 SU/GPU-hr | GRPO if needed (full model + ref model in memory) |
 
-**Key constraint:** A100s are **40 GB**, not 80 GB. A 32B model in FP16 is ~64 GB — it does NOT fit on a single A100. All 32B training requires either:
-- DeepSpeed ZeRO-3 across 4× A100s (shards model across GPUs)
-- QLoRA/QDoRA with 4-bit base model (fits on 1-2 GPUs)
-- The H200 partition for phases that need full model + optimizer in memory
+**Key constraint:** A100s are **40 GB**, not 80 GB. A 27B model in FP16 is ~54 GB — does NOT fit on a single A100. LoRA SFT requires DeepSpeed ZeRO-3 across 4x A100s or QLoRA with 4-bit base.
 
 ### File Systems
 
 | Path | Name | Purpose | Quota | Backed Up? |
 |------|------|---------|-------|-----------|
 | `/u/$USER` | HOME | Scripts, configs, small files | 50 GB | Yes (daily snapshots, 14 days) |
-| `/projects/<project>` | PROJECTS | Shared project data, model weights | 1 TB default (request increase) | **No** |
-| `/scratch/<project>` | SCRATCH | Training data, checkpoints, logs | 50 TB default | **No** |
+| `/projects/<project>` | PROJECTS | Shared project data, model weights | 1 TB default | **No** |
+| `/scratch/<project>` | SCRATCH | Training data, checkpoints, logs | 500 GB shared | **No** |
 | `/tmp` (node-local) | LOCAL SSD | Fast temporary storage during jobs | 1.5 TB | No (wiped after job) |
 
-**⚠️ No backups on /projects or /scratch.** You must manually back up critical checkpoints (e.g., copy to HOME or transfer off-cluster via Globus).
+**WARNING: /scratch is shared 500 GB total — don't park large models. Download right before use, clean up after.**
 
 ### Recommended File Layout
 
 ```
 /u/$USER/
-├── jarvis/                    # Git repo clone (scripts + configs)
+├── JARVIS/                    # Git repo clone (scripts + configs)
 │   ├── training/
 │   ├── configs/
 │   └── scripts/
 
-/projects/<project>/
-├── models/                    # Pre-trained base models (~100 GB)
-│   ├── r1-distill-qwen-32b/
-│   ├── qwen3-32b/
-│   └── r1-0528/              # Teacher model (if running locally)
+/projects/<project>/$USER/
+├── models/                    # Pre-trained base models
+│   ├── qwen3.5-27b/          # NEW — unified base
+│   ├── r1-distill-qwen-32b/  # OLD — kept for reference until migration confirmed
+│   └── qwen2.5-coder-32b-instruct/  # OLD — kept for reference
 ├── adapters/                  # Trained LoRA adapters (output)
-│   ├── physics_general/
-│   ├── physics_hep/
-│   ├── code_general/
-│   └── code_hep/
+│   ├── hep_physics/
+│   └── hep_code/
 
-/scratch/<project>/
-├── data/                      # Training datasets (~200 GB)
-│   ├── physics_traces/
-│   ├── ladder_curriculum/
-│   ├── textbook_chapters/
-│   └── code_problems/
-├── checkpoints/               # Training checkpoints (~500 GB+)
-│   ├── physics_sft/
-│   ├── physics_grpo/
-│   ├── physics_ettrl/
-│   └── code_azr/
-├── logs/                      # Training logs + wandb
-└── eval/                      # Benchmark evaluation results
+/scratch/<project>/$USER/
+├── data/                      # Training datasets
+│   ├── hep_physics/           # HEP physics training data
+│   ├── hep_code/              # HEP code training data
+│   └── physics_traces/        # Phase 4A traces (old model, archive)
+├── checkpoints/               # Training checkpoints
+│   ├── hep_physics_sft/
+│   └── hep_code_sft/
+├── logs/                      # Training logs
+├── eval/                      # Benchmark evaluation results
+└── tb_logs/                   # TensorBoard logs
 ```
 
 ---
@@ -82,34 +93,27 @@ ssh login.delta.ncsa.illinois.edu
 # Check your allocation
 accounts   # Lists your projects and remaining SUs
 
-# Load modules
-module load PrgEnv-gnu
+# Load modules (NOT anaconda3 — it doesn't exist on Delta)
+module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-# Create conda environment
-module load anaconda3
-conda create -n jarvis python=3.11 -y
-conda activate jarvis
+# Create venv (not conda)
+python -m venv /scratch/bgde/jhill5/jarvis-venv
+source /scratch/bgde/jhill5/jarvis-venv/bin/activate
 
 # Install PyTorch (CUDA 12.x)
-conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia
+pip install torch --index-url https://download.pytorch.org/whl/cu124
 
 # Install training dependencies
 pip install deepspeed transformers peft datasets accelerate
-pip install vllm  # For data generation / inference
-pip install wandb  # Experiment tracking
+pip install vllm  # For inference / evals
+pip install tensorboard  # Experiment tracking (no wandb)
 pip install faiss-cpu  # RAG index building
 
-# Clone veRL framework (for GRPO and AZR)
-cd /projects/<project>
-git clone https://github.com/volcengine/verl.git
-cd verl && pip install -e .
-
-# Download base models to /projects
+# Download Qwen3.5-27B to /projects
 python -c "
 from huggingface_hub import snapshot_download
-snapshot_download('deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', local_dir='/projects/<project>/models/r1-distill-qwen-32b')
-snapshot_download('Qwen/Qwen3-32B', local_dir='/projects/<project>/models/qwen3-32b')
+snapshot_download('Qwen/Qwen3.5-27B', local_dir='/projects/bgde/jhill5/models/qwen3.5-27b')
 "
 ```
 
@@ -118,128 +122,114 @@ snapshot_download('Qwen/Qwen3-32B', local_dir='/projects/<project>/models/qwen3-
 ```bash
 #!/bin/bash
 #SBATCH --job-name=jarvis-train
-#SBATCH --account=<your-access-project>
+#SBATCH --account=bgde-delta-gpu
 #SBATCH --partition=gpuA100x4
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=4
 #SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=240G                            # Leave ~16 GB for OS
+#SBATCH --mem=240G
 #SBATCH --time=48:00:00
-#SBATCH --constraint="scratch&projects"       # Declare file system deps
-#SBATCH --output=/scratch/<project>/logs/%x-%j.out
-#SBATCH --error=/scratch/<project>/logs/%x-%j.err
+#SBATCH --constraint="scratch&projects"
+#SBATCH --output=/scratch/bgde/jhill5/logs/%x-%j.out
+#SBATCH --error=/scratch/bgde/jhill5/logs/%x-%j.err
 
-module load PrgEnv-gnu cudatoolkit/25.3_12.8 anaconda3
-conda activate jarvis
+module load python/3.13.5-gcc13.3.1
+module load cudatoolkit/25.3_12.8
+source /scratch/bgde/jhill5/jarvis-venv/bin/activate
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
-export WANDB_PROJECT=jarvis
 export NCCL_DEBUG=INFO
 export MASTER_PORT=29500
 export TMPDIR=/tmp
 export HF_HOME=/tmp/hf_cache
+export PYTHONUNBUFFERED=1
 
 # Your training command here
 ```
 
-### SLURM Job Script Template (H200 — ETTRL only)
-
-```bash
-#!/bin/bash
-#SBATCH --job-name=jarvis-ettrl
-#SBATCH --account=<your-access-project>
-#SBATCH --partition=gpuH200x8                 # 3× SU rate!
-#SBATCH --nodes=1
-#SBATCH --gpus-per-node=4                     # Use 4 of 8 to save SUs
-#SBATCH --time=48:00:00
-#SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/<project>/logs/%x-%j.out
-
-# Budget: 900 SU at 3×/GPU-hr = 300 H200 GPU-hrs = 4 GPUs × 75 hrs
-```
-
 ---
 
-## Budget Allocation
+## Revised Budget Allocation
 
-| Phase | SUs | GPU-hrs | Partition | Brain |
-|-------|-----|---------|-----------|-------|
-| A. Data generation | 350 | 350 A100-hrs | gpuA100x4 | Physics |
-| B. Distillation SFT | 800 | 800 A100-hrs | gpuA100x4 | Physics |
-| C. Curriculum GRPO | 2,000 | 2,000 A100-hrs | gpuA100x4 | Physics |
-| D. ETTRL polish | 900 | 300 H200-hrs | gpuH200x8 | Physics |
-| E. Self-distillation | 450 | 450 A100-hrs | gpuA100x4 | Physics |
-| F. AZR self-play RL | 2,000 | 2,000 A100-hrs | gpuA100x4 | Code |
-| G. Targeted SFT | 300 | 300 A100-hrs | gpuA100x4 | Code |
-| H. Code self-distillation | 300 | 300 A100-hrs | gpuA100x4 | Code |
-| I. Router + eval | 200 | 200 A100-hrs | gpuA100x4 | Router |
-| J. Exploration buffer | 700 | 700 A100-hrs | gpuA100x4 | Contingency |
-| **Total** | **8,000** | | | |
+| Phase | SUs | GPU-hrs | Partition | Purpose |
+|-------|-----|---------|-----------|---------|
+| 4A (old) — SPENT | ~76 | ~76 A100-hrs | gpuA100x4 | Trace generation (old model — archived) |
+| 4M-eval: Baseline evals | ~20 | ~20 A100-hrs | gpuA100x4 | Confirm Qwen3.5-27B published benchmarks |
+| 4A-new: HEP data curation | ~50 | ~50 A100-hrs | gpuA100x4 | Curate HEP physics + code training data |
+| 4B-new: HEP physics LoRA | ~200 | ~200 A100-hrs | gpuA100x4 | QDoRA on Qwen3.5-27B, HEP physics |
+| 4C-new: HEP code LoRA | ~200 | ~200 A100-hrs | gpuA100x4 | QDoRA on Qwen3.5-27B, HEP code |
+| 4D-new: General GRPO | 2,000-3,000 | 2,000-3,000 | gpuA100x4/H200 | Optional — RL for general reasoning/code |
+| 4E-new: Router retrain | ~50 | ~50 A100-hrs | gpuA100x4 | Difficulty classifier calibration |
+| Buffer | ~4,300-5,300 | — | — | Future training, new adapters, experiments |
+| **Total budget** | **8,000** | | | |
+| **Spent** | **~76** | | | |
 
 ---
 
 ## Phase-by-Phase Training Commands
 
-### Phase A: Data Generation (~350 SU)
+### Phase 4M-eval: Baseline Evals (~20 SU)
 
-**A1. Multi-teacher traces (~200 SU)**
-
-⚠️ **R1-0528 sizing problem:** 685B MoE at 4-bit ≈ 170 GB VRAM. `gpuA100x4` has 160 GB total — doesn't fit. Options:
-1. **Use DeepSeek API** (best — zero SU cost for this phase)
-2. Use `gpuA100x8` partition (320 GB, but costs more SUs per hour)
-3. Use R1-Distill-Qwen-32B as teacher (fits on gpuA100x4, lower quality)
+**First priority.** Confirm Qwen3.5-27B published benchmarks on our eval harnesses before committing to migration.
 
 ```bash
-# Option 1: API-based (recommended)
+#SBATCH --partition=gpuA100x4
+#SBATCH --gpus-per-node=4 --time=4:00:00
+
+# GPQA Diamond — expect ~86%
+python -m training.eval.run_gpqa \
+  --model /projects/bgde/jhill5/models/qwen3.5-27b \
+  --output /scratch/bgde/jhill5/eval/qwen35_gpqa.json \
+  --data-dir /scratch/bgde/jhill5/data/benchmarks \
+  --log-dir /scratch/bgde/jhill5/tb_logs \
+  --experiment "qwen35_baseline"
+
+# LiveCodeBench — expect ~80%
+python -m training.eval.run_livecode \
+  --model /projects/bgde/jhill5/models/qwen3.5-27b \
+  --output /scratch/bgde/jhill5/eval/qwen35_livecode.json
+
+# AIME 2024 — expect ~81%
+python -m training.eval.run_aime \
+  --model /projects/bgde/jhill5/models/qwen3.5-27b \
+  --output /scratch/bgde/jhill5/eval/qwen35_aime.json
+```
+
+### Phase 4A-new: HEP Data Curation (~50 SU)
+
+Curate HEP-specific training data from:
+1. GRACE tool implementations (Geant4, ROOT, Pythia8 usage patterns)
+2. HEP open-source repos (detector simulation configs, analysis scripts)
+3. Existing 5,000 traces — filter for HEP-relevant problems only
+4. Generate new traces from Qwen3.5-27B on HEP problems (self-distillation)
+
+```bash
+# Generate HEP-specific traces
 python training/physics/generate_traces_api.py \
-  --problems /scratch/<project>/data/physics_problems.jsonl \
-  --output /scratch/<project>/data/physics_traces/ \
-  --model deepseek-r1-0528 \
+  --problems /scratch/bgde/jhill5/data/hep_problems.jsonl \
+  --output /scratch/bgde/jhill5/data/hep_physics/ \
+  --model /projects/bgde/jhill5/models/qwen3.5-27b \
   --traces_per_problem 8
-```
 
-**A2. LADDER curriculum (~50 SU)**
-
-```bash
-#SBATCH --partition=gpuA100x4
-#SBATCH --gpus-per-node=2 --time=12:00:00
-
-python training/physics/ladder_curriculum.py \
-  --hard_problems /scratch/<project>/data/hard_physics_5k.jsonl \
-  --model /projects/<project>/models/r1-distill-qwen-32b \
-  --output /scratch/<project>/data/ladder_curriculum/
-```
-
-**A3. Rejection sampling (~50 SU)**
-
-```bash
+# Filter and format for SFT
 python training/physics/rejection_sample.py \
-  --traces /scratch/<project>/data/physics_traces/ \
-  --output /scratch/<project>/data/physics_filtered_100k.jsonl \
-  --target_count 100000
+  --traces /scratch/bgde/jhill5/data/hep_physics/ \
+  --output /scratch/bgde/jhill5/data/hep_physics_filtered.jsonl
 ```
 
-**A4. Synthetic textbooks (~50 SU)**
+### Phase 4B-new: HEP Physics LoRA (~200 SU)
 
-```bash
-python training/physics/generate_textbooks.py \
-  --output /scratch/<project>/data/textbook_chapters/ \
-  --count 5000
-```
-
-### Phase B: Distillation SFT (~800 SU)
-
-ZeRO-3 is REQUIRED — 32B model exceeds single A100 40GB.
+QDoRA (rank-32) on Qwen3.5-27B with HEP physics data.
 
 ```bash
 #SBATCH --partition=gpuA100x4
-#SBATCH --gpus-per-node=4 --time=48:00:00
+#SBATCH --gpus-per-node=4 --time=24:00:00
 
-deepspeed --num_gpus=4 training/physics/run_sft.py \
-  --model_name_or_path /projects/<project>/models/r1-distill-qwen-32b \
-  --train_data /scratch/<project>/data/physics_filtered_100k.jsonl \
-  --output_dir /scratch/<project>/checkpoints/physics_sft/ \
+deepspeed --num_gpus=4 --module training.physics.run_sft \
+  --model_name_or_path /projects/bgde/jhill5/models/qwen3.5-27b \
+  --train_data /scratch/bgde/jhill5/data/hep_physics_filtered.jsonl \
+  --output_dir /scratch/bgde/jhill5/checkpoints/hep_physics_sft/ \
   --deepspeed configs/ds_zero3.json \
   --use_dora true \
   --lora_rank 32 --lora_alpha 64 \
@@ -248,106 +238,45 @@ deepspeed --num_gpus=4 training/physics/run_sft.py \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 --gradient_accumulation_steps 4 \
   --max_seq_length 8192 --bf16 \
-  --save_strategy epoch
+  --save_strategy epoch \
+  --logging_steps 10 \
+  --logging_dir /scratch/bgde/jhill5/tb_logs/hep_physics_sft
 ```
 
-**DeepSpeed ZeRO-3 config** (`configs/ds_zero3.json`):
-```json
-{
-  "bf16": {"enabled": true},
-  "zero_optimization": {
-    "stage": 3,
-    "overlap_comm": true,
-    "contiguous_gradients": true,
-    "reduce_scatter": true,
-    "reduce_bucket_size": 5e8,
-    "sub_group_size": 1e9,
-    "stage3_prefetch_bucket_size": 5e8,
-    "stage3_param_persistence_threshold": 1e6,
-    "stage3_max_live_parameters": 1e9,
-    "stage3_gather_16bit_weights_on_model_save": true,
-    "offload_optimizer": {"device": "cpu", "pin_memory": true}
-  },
-  "gradient_accumulation_steps": 4,
-  "gradient_clipping": 1.0,
-  "train_batch_size": 64,
-  "train_micro_batch_size_per_gpu": 4
-}
-```
+### Phase 4C-new: HEP Code LoRA (~200 SU)
 
-### Phase C: Curriculum GRPO (~2,000 SU)
+Same as above but with HEP code data (Geant4, ROOT, Pythia8 patterns).
 
 ```bash
-#SBATCH --partition=gpuA100x4
+deepspeed --num_gpus=4 --module training.physics.run_sft \
+  --model_name_or_path /projects/bgde/jhill5/models/qwen3.5-27b \
+  --train_data /scratch/bgde/jhill5/data/hep_code_filtered.jsonl \
+  --output_dir /scratch/bgde/jhill5/checkpoints/hep_code_sft/ \
+  --deepspeed configs/ds_zero3.json \
+  --use_dora true \
+  --lora_rank 32 --lora_alpha 64 \
+  --learning_rate 2e-5 --warmup_ratio 0.03 \
+  --num_train_epochs 3 \
+  --per_device_train_batch_size 4 --gradient_accumulation_steps 4 \
+  --max_seq_length 8192 --bf16 \
+  --save_strategy epoch \
+  --logging_dir /scratch/bgde/jhill5/tb_logs/hep_code_sft
+```
+
+### Phase 4D-new: General GRPO (Optional, ~2,000-3,000 SU)
+
+Only pursue if baseline evals confirm significant room for improvement. RL with verifiable rewards (math: correct answer, code: execution pass, physics: ground truth).
+
+```bash
+#SBATCH --partition=gpuA100x4 (or gpuH200x8 if model+ref doesn't fit)
 #SBATCH --gpus-per-node=4 --time=72:00:00
 
 python -m verl.trainer.main_ppo \
-  --config configs/physics_grpo.yaml \
-  --model.path /scratch/<project>/checkpoints/physics_sft/final/ \
+  --config configs/qwen35_grpo.yaml \
+  --model.path /projects/bgde/jhill5/models/qwen3.5-27b \
   --trainer.total_steps 500 \
-  --trainer.save_dir /scratch/<project>/checkpoints/physics_grpo/ \
+  --trainer.save_dir /scratch/bgde/jhill5/checkpoints/qwen35_grpo/ \
   --trainer.checkpoint_interval 100
-```
-
-**⚠️ Checkpoint every 100 steps.** GRPO runs are 72+ hours. Save frequently. Resume with `--resume_from`.
-
-### Phase D: ETTRL (~900 SU on H200)
-
-```bash
-#SBATCH --partition=gpuH200x8
-#SBATCH --gpus-per-node=4 --time=48:00:00
-
-python training/physics/run_ettrl.py \
-  --model /scratch/<project>/checkpoints/physics_grpo/final/ \
-  --problems /scratch/<project>/data/hard_physics_500.jsonl \
-  --output_dir /scratch/<project>/checkpoints/physics_ettrl/ \
-  --num_solutions 64 --episodes 50 \
-  --gradient_checkpointing true
-```
-
-**H200 queue tip:** Only 8 H200 nodes exist — expect queuing. Submit during off-peak (nights/weekends). Use shorter wall clock + checkpointing.
-
-### Phase F: Code AZR (~2,000 SU)
-
-**Validate first (200 SU):**
-```bash
-#SBATCH --partition=gpuA100x4
-#SBATCH --gpus-per-node=4 --time=12:00:00
-
-python -m verl.trainer.main_azr \
-  --model.path /projects/<project>/models/qwen3-32b \
-  --trainer.total_steps 50 \
-  --trainer.save_dir /scratch/<project>/checkpoints/azr_validation/
-# CHECK: loss decreasing? proposed problems sensible? no mode collapse?
-# If FAIL → switch to standard GRPO with curated datasets
-```
-
-**Full training (if validation passes):**
-```bash
-#SBATCH --partition=gpuA100x4
-#SBATCH --gpus-per-node=4 --time=72:00:00
-
-python -m verl.trainer.main_azr \
-  --model.path /projects/<project>/models/qwen3-32b \
-  --algorithm reinforce_pp \
-  --trainer.total_steps 2000 \
-  --trainer.save_dir /scratch/<project>/checkpoints/code_azr/ \
-  --trainer.checkpoint_interval 200
-```
-
-### Post-Training (CPU — no SUs)
-
-```bash
-# POME
-python training/postprocess/pome.py \
-  --base_model /projects/<project>/models/r1-distill-qwen-32b \
-  --adapter /scratch/<project>/checkpoints/physics_grpo/final/ \
-  --output /projects/<project>/adapters/physics_general/
-
-# SLERP merge
-python training/postprocess/slerp_merge.py \
-  --checkpoints /scratch/<project>/checkpoints/physics_grpo/step_{300,400,500}/ \
-  --output /projects/<project>/adapters/physics_general_merged/
 ```
 
 ---
@@ -356,24 +285,23 @@ python training/postprocess/slerp_merge.py \
 
 ```bash
 #SBATCH --partition=gpuA100x4
-#SBATCH --gpus-per-node=2 --time=4:00:00
+#SBATCH --gpus-per-node=4 --time=4:00:00
 
-# Physics: GPQA Diamond — target ≥78%
-python training/eval/run_gpqa.py \
-  --model /projects/<project>/models/r1-distill-qwen-32b \
-  --adapter /projects/<project>/adapters/physics_general/ \
-  --output /scratch/<project>/eval/physics_gpqa.json
+# Physics: GPQA Diamond
+python -m training.eval.run_gpqa \
+  --model /projects/bgde/jhill5/models/qwen3.5-27b \
+  --adapter /projects/bgde/jhill5/adapters/hep_physics/ \
+  --output /scratch/bgde/jhill5/eval/hep_physics_gpqa.json
 
-# Code: LiveCodeBench — target ≥65%
-python training/eval/run_livecode.py \
-  --model /projects/<project>/models/qwen3-32b \
-  --adapter /projects/<project>/adapters/code_general/ \
-  --output /scratch/<project>/eval/code_livecode.json
+# Code: LiveCodeBench
+python -m training.eval.run_livecode \
+  --model /projects/bgde/jhill5/models/qwen3.5-27b \
+  --output /scratch/bgde/jhill5/eval/qwen35_livecode.json
 
-# Math: AIME 2024 — target ≥87% (off-shelf + inference amp)
-python training/eval/run_aime.py \
-  --model /projects/<project>/models/r1-distill-qwen-32b \
-  --output /scratch/<project>/eval/math_aime.json
+# Math: AIME 2024
+python -m training.eval.run_aime \
+  --model /projects/bgde/jhill5/models/qwen3.5-27b \
+  --output /scratch/bgde/jhill5/eval/qwen35_aime.json
 ```
 
 ---
@@ -381,15 +309,13 @@ python training/eval/run_aime.py \
 ## Export to DGX Spark
 
 ```bash
-# Quantize for NVFP4 deployment
-python training/export/quantize_adapters.py \
-  --adapters /projects/<project>/adapters/ \
-  --format nvfp4 \
-  --output /projects/<project>/adapters_fp4/
+# Package adapters for transfer
+tar czf jarvis_hep_adapters.tar.gz \
+  -C /projects/bgde/jhill5 \
+  adapters/hep_physics/ \
+  adapters/hep_code/
 
-# Package and transfer via Globus ("NCSA Delta" endpoint) or scp
-tar czf jarvis_artifacts.tar.gz -C /projects/<project> adapters/ adapters_fp4/
-# Transfer to DGX Spark
+# Transfer via Globus ("NCSA Delta" endpoint) or scp to DGX Spark
 ```
 
 ---
@@ -399,10 +325,10 @@ tar czf jarvis_artifacts.tar.gz -C /projects/<project> adapters/ adapters_fp4/
 | Problem | Solution |
 |---------|----------|
 | OOM on A100 40GB during SFT | Enable `offload_optimizer: {device: cpu}` in ZeRO-3 config. Reduce batch size. Enable gradient checkpointing. |
-| OOM on A100 during GRPO | GRPO needs model + ref model — very tight on 40GB. Use ZeRO-3 with CPU offload. Reduce `num_solutions` from 64 to 32. |
-| ETTRL must run on H200 | Model + optimizer states exceed 40GB for 32B model. No workaround — must use H200 partition (3× cost). |
-| R1-0528 doesn't fit on gpuA100x4 | 685B at 4-bit = 170 GB > 160 GB (4×40). Use API, or gpuA100x8, or substitute R1-Distill-32B as teacher. |
-| Job preempted | Always checkpoint. Resume with `--resume_from`. Preempt jobs get 10 min minimum + 5 min grace. |
-| H200 queue wait is days | Submit at off-peak hours. Use shorter wall clock with more frequent checkpoints. |
+| Qwen3.5-27B doesn't fit on single A100 | 27B at FP16 = ~54 GB > 40 GB. Must use ZeRO-3 across 4 GPUs or QLoRA with 4-bit base. |
+| vLLM doesn't support Qwen3.5 | Check vLLM version. Qwen3.5 support added in vLLM 0.18+. Update with `pip install -U vllm`. |
+| Job preempted | Always checkpoint. Resume with `--resume_from`. |
 | Slow I/O during training | Copy data to node-local `/tmp` at job start. Set `HF_HOME=/tmp/hf_cache`. |
 | Check SU balance | Run `accounts` command on login node. |
+| SLURM .err file has errors but .out looks fine | Always check both files. API errors and Python tracebacks go to stderr. |
+| anaconda3 module not found | Use `module load python/3.13.5-gcc13.3.1` and venv instead. anaconda3 doesn't exist on Delta. |

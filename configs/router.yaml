@@ -43,18 +43,24 @@ hep_subdomain:
     - "pythia"
     - "delphes"
 
+# All domains route to the single Qwen3.5-27B base model.
+# Domain classification is still used for:
+#   1. Specialist dispatch (chemistry, biology, protein, genomics)
+#   2. RAG activation (physics queries)
+#   3. HEP LoRA activation (physics/code + HEP keywords)
+#   4. Code verification strategy (code queries)
 domain_to_brain:
   math:
-    base_model: "r1_distill_qwen_32b"
-    adapter: "math_adapter"
+    base_model: "qwen35_27b"
+    adapter: null
   physics:
-    base_model: "r1_distill_qwen_32b"
-    adapter: "physics_general"
-    hep_adapter: "physics_hep"
+    base_model: "qwen35_27b"
+    adapter: null
+    hep_adapter: "hep_physics"
   code:
-    base_model: "qwen25_coder_32b"
-    adapter: "code_general"
-    hep_adapter: "code_hep"
+    base_model: "qwen35_27b"
+    adapter: null
+    hep_adapter: "hep_code"
   chemistry:
     specialist: "chemistry"
   biology:
@@ -64,5 +70,5 @@ domain_to_brain:
   genomics:
     specialist: "genomics"
   general:
-    base_model: "r1_distill_qwen_32b"
+    base_model: "qwen35_27b"
     adapter: null

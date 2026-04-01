@@ -2,23 +2,24 @@
 
 ## System Overview
 
-JARVIS is a routed ensemble inference system. It is composed of five major subsystems:
+JARVIS is a difficulty-aware inference system with specialist routing. It is composed of five major subsystems:
 
 1. **API Server** — Receives requests, returns responses. OpenAI-compatible.
 2. **Router** — Classifies queries by domain and difficulty.
-3. **Brain Manager** — Loads, swaps, and manages model weights and LoRA adapters.
+3. **Brain Manager** — Loads and manages the base model, LoRA adapters, and specialists.
 4. **Inference Engine** — Applies difficulty-aware amplification (best-of-N, verification, budget forcing).
 5. **Specialist Registry** — Manages on-demand loading of domain specialist models from disk.
 
 ## Request Lifecycle
 
 ```
-1. GRACE sends POST /v1/chat/completions with a query
+1. GRACE (or any client) sends POST /v1/chat/completions with a query
 2. API Server receives the request
-3. Router classifies: { domain: "physics", difficulty: "hard", subdomain: "qft" }
-4. Brain Manager ensures the correct model + LoRA adapter is loaded
-   - If physics brain with HEP adapter is already resident → proceed
-   - If not → swap LoRA adapter (milliseconds) or load model from SSD (seconds)
+3. Router classifies: { domain: "physics", difficulty: "hard", hep: true }
+4. Brain Manager ensures correct configuration:
+   - Base model (Qwen3.5-27B) is always resident
+   - If HEP detected → hot-swap HEP LoRA adapter (milliseconds)
+   - If specialist domain (chemistry, protein, etc.) → load specialist from SSD
 5. Inference Engine selects strategy based on difficulty:
    - Easy → single forward pass
    - Medium → best-of-4 + self-consistency voting
@@ -46,25 +47,22 @@ JARVIS is a routed ensemble inference system. It is composed of five major subsy
 **Behavior:**
 - Streaming support via SSE (Server-Sent Events)
 - Request timeout configurable per difficulty level (easy: 30s, medium: 120s, hard: 600s)
-- The `model` field in the request is optional — if omitted, the router decides. If specified (e.g., `model: "physics"` or `model: "chemistry"`), routing is overridden.
+- The `model` field in the request is optional — if omitted, the router decides. If specified (e.g., `model: "chemistry"`), routing is overridden to that specialist.
 
 ### 2. Router (`src/router/`)
 
-**Architecture:** Two lightweight BERT classifiers running sequentially.
+**Architecture:** Two lightweight BERT classifiers running sequentially, plus keyword-based HEP detection.
 
 **Stage 1 — Domain Classification:**
 - Input: query text (last user message + system prompt if present)
-- Output: one of `math`, `physics`, `code`, `chemistry`, `biology`, `genomics`, `protein`, `general`, or any registered specialist domain
-- Training data: ~5K labeled examples per core domain, expandable
+- Output: one of `math`, `physics`, `code`, `chemistry`, `biology`, `genomics`, `protein`, `general`
+- Purpose: Determines RAG activation (physics), specialist dispatch (chemistry/biology/protein/genomics), HEP LoRA activation (physics/code + HEP keywords), and code verification strategy (code)
 - Model: `bert-base-uncased` fine-tuned, ~110M params (~0.06 GB)
 
 **Stage 2 — Difficulty Estimation:**
 - Input: query text + predicted domain
 - Output: one of `easy`, `medium`, `hard`
-- Training data: generated automatically by running each brain on a validation set
-  - Correct in 1 pass = easy
-  - Correct in best-of-4 = medium
-  - Incorrect or only correct in best-of-16 = hard
+- Purpose: Drives inference strategy selection (single-pass vs best-of-N vs verified)
 - Model: separate `bert-base-uncased` fine-tuned
 
 **Stage 3 — HEP Subdomain Detection (optional):**
@@ -72,47 +70,32 @@ JARVIS is a routed ensemble inference system. It is composed of five major subsy
 - If HEP detected → signal Brain Manager to hot-swap HEP LoRA adapter
 - Keywords + classifier hybrid approach
 
-**Extensibility:** Adding a new domain requires:
+**Extensibility:** Adding a new specialist domain requires:
 1. Add domain label to Stage 1 classifier
 2. Provide ~1K-5K labeled training examples
 3. Retrain classifier (~minutes on CPU)
-4. Register the new brain/specialist in `configs/models.yaml`
+4. Register the new specialist in `configs/models.yaml`
 
 ### 3. Brain Manager (`src/brains/`)
 
-**Responsibility:** Manages model loading, LoRA adapter swapping, and memory tracking.
+**Responsibility:** Manages base model loading, LoRA adapter swapping, and memory tracking.
 
 **Memory Model:**
 ```yaml
-# Always resident (core system ~50 GB at FP4)
+# Always resident (core system ~21 GB)
 permanent:
+  - qwen35_27b: 14.0 GB          # Single unified base model (FP4)
   - router: 0.06 GB
-  - think_prm: 0.8 GB          # ThinkPRM 1.5B verifier
-  - draft_model: 0.8 GB         # Speculative decoding draft (1.5B)
-  - rag_index: 5.0 GB           # FAISS physics knowledge base
-  - framework_overhead: 10.0 GB  # vLLM/TensorRT-LLM + OS
+  - think_prm: 0.8 GB            # ThinkPRM 1.5B verifier
+  - draft_model: 0.8 GB          # Speculative decoding draft (Qwen3.5-1.5B)
+  - rag_index: 5.0 GB            # FAISS physics knowledge base
+  - framework_overhead: 7.0 GB   # vLLM + OS
+  - total: ~27.66 GB
 
-# Two separate base models (~32 GB total at FP4)
-# R1-Distill-Qwen-32B = Qwen2.5 architecture (physics + math adapters)
-# Qwen3-32B = Qwen3 architecture (code adapters)
-# These are NOT interchangeable — different architectures, different tokenizers
-base_models:
-  - r1_distill_qwen_32b: 16.0 GB   # Physics brain base (+ optional math LoRA)
-  - qwen3_32b: 16.0 GB              # Code brain base
-
-# Swappable LoRA adapters (hot-swap in milliseconds, WITHIN same base only)
+# Swappable LoRA adapters (hot-swap in milliseconds)
 lora_adapters:
-  on_r1_distill_qwen_32b:           # Only compatible with R1-Distill-Qwen-32B
-    - physics_general: 0.3 GB
-    - physics_hep: 0.3 GB
-    - math_adapter: 0.3 GB           # Optional — if using 32B math instead of 70B
-  on_qwen3_32b:                      # Only compatible with Qwen3-32B
-    - code_general: 0.3 GB
-    - code_hep: 0.3 GB
-
-# Optional: separate math brain (loads INSTEAD of using math LoRA on R1-Distill)
-optional_base:
-  - r1_distill_70b: 35.0 GB   # Math brain — only load if max math performance needed
+  - hep_physics: 0.3 GB          # Particle physics, detector design
+  - hep_code: 0.3 GB             # Geant4, ROOT, Pythia8 patterns
 
 # On-demand specialists (loaded from SSD, 5-10 seconds)
 specialists:
@@ -122,18 +105,15 @@ specialists:
   - biomistral_7b: 3.5 GB
 ```
 
-**Two-base architecture rationale:** R1-Distill-Qwen-32B (Qwen2.5) carries R1's reasoning chain distillation — critical for physics. Qwen3-32B has stronger code capabilities for AZR self-play training. The architectures are incompatible (different attention, tokenizers, layer structure), so LoRA adapters cannot be shared across them. The cost is ~32 GB for two bases instead of ~16 GB for one, but the DGX Spark's 128 GB accommodates this comfortably.
+**Single-base architecture rationale:** Qwen3.5-27B (released Feb 2026) surpasses our original targets across all benchmarks — GPQA Diamond 86%, LiveCodeBench 80.7%, AIME 81%. A single 14 GB model (FP4) replaces two 16 GB models (R1-Distill-Qwen-32B + Qwen2.5-Coder-32B-Instruct), freeing ~18 GB for longer context windows, more parallel candidates, and more simultaneously-loaded specialists. Domain-specific expertise is provided by HEP LoRA adapters, not separate base models.
 
 **Adapter Swapping Logic:**
-1. Router determines domain → identifies which base model is needed
-2. If the correct base is already loaded and the right adapter is active → proceed immediately
-3. If correct base is loaded but wrong adapter → swap LoRA adapter (milliseconds, within same base only)
-4. If different base is needed (e.g., switching from physics to code) → both bases are always resident, just activate the other base's inference endpoint. No loading delay.
-5. If specialist model needed → check if already resident → if not, load from SSD, optionally evicting least-recently-used specialist
+1. Router determines domain → checks if HEP-specific
+2. If HEP detected and correct adapter not active → swap LoRA adapter (milliseconds)
+3. If non-HEP query and adapter is active → unload adapter (milliseconds)
+4. If specialist domain (chemistry, protein, etc.) → load specialist from SSD if not resident, with LRU eviction if memory tight
 
-**⚠️ Cross-base adapter constraint:** Physics LoRA adapters (trained on R1-Distill-Qwen-32B / Qwen2.5) CANNOT be loaded onto Qwen3-32B, and vice versa. The Brain Manager must enforce this — attempting to load an incompatible adapter should raise an error, not silently produce garbage.
-
-**Memory Tracking:** Maintain a real-time ledger of loaded models and their memory footprints. Refuse to load a model if it would exceed the 128GB budget minus a 5GB safety margin. With two bases always resident (~50 GB core), approximately 73 GB remains for the 70B math brain, specialists, and KV cache.
+**Memory Tracking:** Maintain a real-time ledger of loaded models and their memory footprints. Refuse to load a model if it would exceed the 128GB budget minus a 5GB safety margin. With ~28 GB core, approximately 95 GB remains for specialists and KV cache.
 
 ### 4. Inference Engine (`src/inference/`)
 
@@ -141,13 +121,13 @@ specialists:
 
 | Difficulty | Strategy | Approx Cost | Timeout |
 |-----------|----------|-------------|---------|
-| Easy | Single pass, speculative decoding | 1× | 30s |
-| Medium | Best-of-4, self-consistency voting | 4× | 120s |
-| Hard | Best-of-16, ThinkPRM verification, budget forcing, verification chain | 16-32× | 600s |
+| Easy | Single pass, speculative decoding | 1x | 30s |
+| Medium | Best-of-4, self-consistency voting | 4x | 120s |
+| Hard | Best-of-16, ThinkPRM verification, budget forcing, verification chain | 16-32x | 600s |
 
 **Subcomponents:**
 
-**a) Speculative Decoding** — Applied to all queries. Uses R1-Distill-Qwen-1.5B as draft model to propose tokens, main model verifies. 2-3× throughput improvement.
+**a) Speculative Decoding** — Applied to all queries. Uses a small Qwen3.5-compatible draft model to propose tokens, main model verifies. 2-3x throughput improvement.
 
 **b) Self-Consistency Voting** — Generate N responses, extract final answers, select by majority vote. Used for medium+ difficulty.
 
@@ -157,56 +137,37 @@ specialists:
 
 **e) Verification Chains** — Append "Verify your answer by [substituting back / checking dimensional analysis / testing edge cases]. If you find an error, correct it." to medium/hard prompts.
 
-**f) S\* Code Verification** — For code brain hard queries only. Generate 16 candidates → generate distinguishing test inputs → execute all candidates → select by correct behavior. Requires sandboxed Python executor.
+**f) S\* Code Verification** — For code domain hard queries. Generate candidates → generate distinguishing test inputs → execute all candidates → select by correct behavior. Requires sandboxed Python executor.
 
 **g) Context Window & KV Cache Management:**
 
-The context window is constrained by both model architecture and available RAM for KV cache storage. Without optimization, the KV cache is the dominant memory consumer for long-context inference.
+The context window is constrained by both model architecture and available RAM for KV cache storage.
 
 **Model architecture limits:**
 
 | Model | Architecture Context | Recommended Max |
 |-------|---------------------|----------------|
-| R1-Distill-Qwen-32B | 128K (Qwen2.5 with YaRN) | 32K (DeepSeek validated) |
-| R1-Distill-Llama-70B | 128K (Llama 3.3) | 32K (DeepSeek validated) |
-| Qwen3-32B | 32K default, 128K with YaRN | 32K |
+| Qwen3.5-27B | 262K native (1M extended) | 131K |
 | 7B specialists | Varies (most 32K-128K) | 32K |
 
-**KV cache memory cost (32B model, 8 KV heads, 128 dim/head, 64 layers):**
+**KV cache memory cost (27B model, FP8 KV):**
 
-| Context Length | FP16 KV | FP8 KV | 2-bit KV (KVQuant) |
-|---------------|---------|--------|-------------------|
-| 8K | ~2 GB | ~1 GB | ~0.25 GB |
-| 16K | ~4 GB | ~2 GB | ~0.5 GB |
-| 32K | ~8 GB | ~4 GB | ~1 GB |
-| 64K | ~16 GB | ~8 GB | ~2 GB |
-| 128K | ~32 GB | ~16 GB | ~4 GB |
+| Context Length | FP8 KV | 2-bit KV (KVQuant) |
+|---------------|--------|-------------------|
+| 32K | ~3 GB | ~0.75 GB |
+| 64K | ~6 GB | ~1.5 GB |
+| 128K | ~12 GB | ~3 GB |
 
-**KV cache optimization techniques (applied in inference config):**
-
-1. **FP8 KV cache quantization** — vLLM native (`kv_cache_dtype="fp8"`). 2× memory reduction, negligible quality loss. **Enabled by default.**
-
-2. **Sub-4-bit KV quantization (KVQuant / AQUA-KV)** — 6-8× memory reduction at <1% perplexity degradation. Requires one-time calibration (~1-6 hours). Available via llm-compressor. **Recommended for hard queries requiring parallel best-of-N at long context.**
-
-3. **KV cache offloading to SSD** — Pages inactive KV cache entries to the 4TB NVMe SSD. Trades small latency (~ms per layer lookup) for effectively unlimited single-stream context. Supported by KVSwap and emerging vLLM features. **Recommended for physics derivations requiring 128K context.**
-
-4. **KV cache eviction (StreamingLLM / H2O)** — Maintains a rolling window of recent tokens + attention sinks. Fixed-size KV cache for arbitrarily long sequences. Trades mid-context recall for infinite streaming. **Use for multi-turn conversations, not single-query reasoning.**
-
-5. **RAG as context replacement** — Instead of loading large documents into context, retrieve relevant passages via FAISS and prepend only those. Converts 200K-token documents into 2K-token retrievals. **Already in the JARVIS plan for physics knowledge.**
-
-6. **Context compression** — Periodically summarize older conversation history to reclaim context space. **Use for long GRACE workflows spanning many queries.**
-
-**Practical context limits on DGX Spark (128GB RAM, ~94GB available after core system):**
+**Practical context limits on DGX Spark (128GB RAM, ~95GB available after core system):**
 
 | Difficulty | Sampling | KV Cache Config | Max Context | KV Memory |
 |-----------|----------|----------------|-------------|-----------|
-| Easy | 1 pass | FP8 | 128K | ~16 GB |
-| Medium | best-of-4 parallel | FP8 | 64K | ~32 GB (4 × 8 GB) |
-| Hard | best-of-16 parallel | FP8 | 32K | ~64 GB (16 × 4 GB) |
-| Hard | best-of-16 parallel | 2-bit KV | 64K | ~32 GB (16 × 2 GB) |
-| Hard | best-of-16 parallel | 2-bit KV | 128K | ~64 GB (16 × 4 GB) |
-| Hard | best-of-16 sequential | FP8 | 128K | ~16 GB (reuse slot) |
-| Derivation | 1 pass + SSD offload | FP8 + offload | 128K+ | ~5 GB active + SSD |
+| Easy | 1 pass | FP8 | 131K | ~12 GB |
+| Medium | best-of-4 parallel | FP8 | 64K | ~24 GB (4 x 6 GB) |
+| Hard | best-of-16 parallel | FP8 | 32K | ~48 GB (16 x 3 GB) |
+| Hard | best-of-16 parallel | 2-bit KV | 64K | ~24 GB (16 x 1.5 GB) |
+| Hard | best-of-16 parallel | 2-bit KV | 128K | ~48 GB (16 x 3 GB) |
+| Derivation | 1 pass + SSD offload | FP8 + offload | 131K+ | ~5 GB active + SSD |
 
 **Default configuration:** FP8 KV cache enabled globally. 2-bit KVQuant enabled for hard queries. SSD offload available for physics derivation mode.
 
@@ -245,9 +206,11 @@ specialists:
 
 **Non-text specialists** (ESM3, Evo 2) require custom API adapters that translate between the OpenAI chat format and the model's native input format (protein sequences, DNA strings). These adapters live in `src/specialists/adapters/`.
 
+**Plug-and-play extensibility:** Adding a new specialist requires only a config entry and (for non-text models) an adapter. The base model can also be swapped by updating `configs/models.yaml` and retraining any LoRA adapters — the inference engine, API, router, and specialists are all model-agnostic.
+
 ### 6. RAG Module (`src/rag/`)
 
-**Purpose:** Augments physics brain queries with retrieved knowledge passages.
+**Purpose:** Augments physics domain queries with retrieved knowledge passages.
 
 **Implementation:**
 - FAISS vector index (~5GB) over physics/chemistry/biology reference corpus
@@ -261,8 +224,8 @@ specialists:
 
 ```
 ┌─────────┐    ┌──────────┐    ┌────────────┐    ┌───────────────┐
-│  GRACE   │───▶│ API      │───▶│  Router    │───▶│ Brain Manager │
-│ (client) │    │ Server   │    │ (classify) │    │ (load/swap)   │
+│  Client  │───▶│ API      │───▶│  Router    │───▶│ Brain Manager │
+│ (GRACE)  │    │ Server   │    │ (classify) │    │ (LoRA/spec.)  │
 └─────────┘    └────┬─────┘    └────────────┘    └───────┬───────┘
                     │                                     │
                     │           ┌────────────┐            │
@@ -271,10 +234,10 @@ specialists:
                     │           └─────┬──────┘            │
                     │                 │                    │
                     │           ┌─────▼──────┐    ┌───────▼───────┐
-                    │           │  Inference  │◀──│  Active Model │
-                    │           │  Engine     │   │  (GPU memory) │
-                    │           │ (amplify)   │   └───────────────┘
-                    │           └─────┬──────┘
+                    │           │  Inference  │◀──│  Qwen3.5-27B  │
+                    │           │  Engine     │   │  + optional   │
+                    │           │ (amplify)   │   │  HEP LoRA     │
+                    │           └─────┬──────┘   └───────────────┘
                     │                 │
                     ◀─────────────────┘
                JSON response
@@ -283,8 +246,8 @@ specialists:
 ## Concurrency Model
 
 - The API server handles multiple concurrent requests via FastAPI's async support
-- vLLM/TensorRT-LLM handles batching internally — multiple queries to the same model are batched for GPU efficiency
-- Model swaps are serialized — only one swap can happen at a time (protected by async lock)
+- vLLM handles batching internally — multiple queries to the same model are batched for GPU efficiency
+- LoRA adapter swaps are serialized — only one swap can happen at a time (protected by async lock)
 - The router runs on CPU and is always available regardless of GPU state
 - Specialist loading is async — the API returns a "processing" status if a model needs to be loaded from SSD
 
@@ -292,5 +255,12 @@ specialists:
 
 - If a model fails to load (OOM, corrupted weights): return 503 with specific error
 - If inference times out: return partial response if streaming, 504 if not
-- If router confidence is below threshold: fall back to the Qwen-32B base model without any LoRA (general-purpose mode)
-- If a specialist adapter is missing: fall back to the closest available brain (e.g., chemistry query with no ChemLLM → physics brain)
+- If router confidence is below threshold: use base Qwen3.5-27B without any LoRA (general-purpose mode)
+- If a specialist adapter is missing: fall back to Qwen3.5-27B base model (strong general capabilities cover most domains)
+
+## Future-Proofing
+
+The architecture is designed for plug-and-play model upgrades:
+- **Base model swap:** Update `configs/models.yaml`, retrain LoRA adapters, verify vLLM support. All other components (API, router, inference engine, specialists) are model-agnostic.
+- **New specialist:** Add config entry + optional adapter. Zero code changes to existing components.
+- **New LoRA domain:** Train adapter, add to config, add keywords to router. Existing adapters unaffected.

@@ -2,42 +2,42 @@
 
 ## What Is JARVIS
 
-JARVIS is a self-hosted, routed multi-specialist AI system that serves as the reasoning backend for GRACE (a High Energy Physics research agent). It replaces expensive frontier API calls with a locally-deployed ensemble of specialist models behind an OpenAI-compatible API.
+JARVIS is a self-hosted, difficulty-aware inference system with specialist routing that serves as the reasoning backend for GRACE (a High Energy Physics research agent) and as a general-purpose LLM replacement for frontier API calls. It deploys a single strong base model behind an OpenAI-compatible API, augmented by inference amplification (best-of-N, verification, budget forcing), domain-specific LoRA adapters, and on-demand specialist models.
 
-**JARVIS is NOT a single model or a Mixture of Experts.** It is a system — a query-level router dispatching to independent specialist brains, wrapped in an inference amplification layer, served via a unified API. Each brain can be swapped, upgraded, or extended independently.
+**JARVIS is a system, not a single model.** It wraps a unified base model (Qwen3.5-27B) in a difficulty-aware inference layer, with specialist routing for non-LLM domains (proteins, genomics) and HEP-specific LoRA adapters for domain expertise. The base model, adapters, and specialists can all be swapped independently.
 
 ## Architecture Overview
 
 ```
-GRACE (HEP Agent) ──HTTP──▶ JARVIS API (localhost:8000)
-                                    │
-                              ┌─────┴─────┐
-                              │   ROUTER   │  (domain + difficulty classifier)
-                              └──┬──┬──┬──┘
-                                 │  │  │
-                    ┌────────────┘  │  └────────────┐
-                    ▼              ▼                ▼
-              ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
-              │   MATH   │ │ PHYSICS  │ │   CODE   │ │ SPECIALISTS  │
-              │  70B/32B │ │   32B    │ │   32B    │ │  7B models   │
-              │ off-shelf│ │ custom   │ │ custom   │ │ on-demand    │
-              └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘
-                   └────────┬───┘────────────┘───────────────┘
-                            ▼
-                   ┌─────────────────┐
-                   │ INFERENCE ENGINE│  (best-of-N, verification, budget forcing)
-                   └────────┬────────┘
-                            ▼
-                      JSON response
+Client (GRACE / any app) ──HTTP──▶ JARVIS API (localhost:8000)
+                                           │
+                                     ┌─────┴─────┐
+                                     │  ROUTER   │  (difficulty + domain classifier)
+                                     └──┬──┬──┬──┘
+                                        │  │  │
+                           ┌────────────┘  │  └────────────┐
+                           ▼               ▼               ▼
+                    ┌────────────┐  ┌────────────┐  ┌──────────────┐
+                    │ Qwen3.5    │  │ Qwen3.5    │  │ SPECIALISTS  │
+                    │  27B       │  │  27B       │  │  7B models   │
+                    │ easy →     │  │ hard →     │  │  on-demand   │
+                    │ single pass│  │ best-of-N  │  │              │
+                    └─────┬──────┘  └─────┬──────┘  └──────┬───────┘
+                          └───────┬───────┘────────────────┘
+                                  ▼
+                         ┌─────────────────┐
+                         │ INFERENCE ENGINE │  (verification, budget forcing)
+                         └────────┬────────┘
+                                  ▼
+                            JSON response
 ```
 
 ## Key Technical Decisions
 
 - **Deployment target:** NVIDIA DGX Spark (128GB unified RAM, GB10 Blackwell, $4,699)
-- **Physics brain base:** R1-Distill-Qwen-32B (Qwen2.5 architecture, 62.1% GPQA baseline, R1 reasoning distillation)
-- **Code brain base:** Qwen2.5-Coder-32B-Instruct (Qwen2.5 architecture, purpose-built for code, HumanEval 88.4%, LiveCodeBench ~40-50%)
-- **Two separate bases (~32 GB total at FP4).** Both now use Qwen2.5 architecture. LoRA adapters are still base-specific (trained on different data).
-- **Math brain:** R1-Distill-Llama-70B (off-shelf, no training) or R1-Distill-Qwen-32B with math LoRA (if memory-constrained)
+- **Unified base model:** Qwen3.5-27B (dense, 27B params, ~14 GB at FP4). Handles physics, math, code, and general queries. GPQA Diamond 86%, LiveCodeBench 80.7%, AIME 81%.
+- **HEP adapters:** Two LoRA adapters (hep_physics, hep_code) hot-swapped when HEP content detected.
+- **No separate math/physics/code brains.** Qwen3.5-27B exceeds all original per-domain targets. Domain classification still used for specialist dispatch, RAG activation, and HEP LoRA triggers.
 - **Router:** Lightweight BERT classifier (~110M params), two-stage: domain → difficulty
 - **Specialist models:** Standalone 7B models (ChemLLM, BioMistral, ESM3-open, Evo 2) loaded from SSD on demand
 - **API format:** OpenAI-compatible `/v1/chat/completions` endpoint
@@ -65,8 +65,8 @@ jarvis/
 │   ├── api/                   # FastAPI server, OpenAI-compatible endpoints
 │   └── rag/                   # FAISS knowledge base for physics
 ├── training/
-│   ├── physics/               # Physics brain training scripts (Delta)
-│   ├── code/                  # Code brain training scripts (Delta)
+│   ├── physics/               # HEP physics LoRA training scripts (Delta)
+│   ├── code/                  # HEP code LoRA training scripts (Delta)
 │   ├── router/                # Router classifier training
 │   └── data/                  # Data generation and curation pipelines
 ├── configs/
@@ -96,7 +96,7 @@ jarvis/
 
 ## Development Principles
 
-1. **Modular everything.** Each brain, the router, the inference engine, and each specialist are independent components with clean interfaces. Adding a new specialist should require zero changes to existing code.
+1. **Modular everything.** The base model, router, inference engine, and each specialist are independent components with clean interfaces. Adding a new specialist should require zero changes to existing code. Swapping the base model is a config change + LoRA retrain.
 
 2. **Configuration-driven.** Model paths, LoRA adapters, inference settings, routing thresholds — all in YAML configs, not hardcoded. Swapping a brain or adding a domain is a config change.
 
@@ -108,13 +108,19 @@ jarvis/
 
 ## Current Status
 
-**Phases 0-6 complete (0-3 validated on Delta).** Full serving stack: vLLM inference, 8-domain router, difficulty-aware amplification (single_pass/best-of-N/verified), specialist loading with LRU eviction (ESM3/Evo2 adapters), RAG for physics queries (30-passage corpus). 142 tests passing. Code brain swapped from Qwen3-32B to Qwen2.5-Coder-32B-Instruct (purpose-built, +20% baseline). S* code execution verification planned. Remaining: Phase 4 (Training on Delta — 8,000 SUs, code budget reallocated to physics GRPO), Phase 7 (GRACE Integration), Phase 8 (Optimization).
+**Phases 0-6 complete (0-3 validated on Delta).** Full serving stack: vLLM inference, 8-domain router, difficulty-aware amplification (single_pass/best-of-N/verified), specialist loading with LRU eviction (ESM3/Evo2 adapters), RAG for physics queries (30-passage corpus). 142 tests passing. S* code execution verification implemented.
+
+**Migration in progress (2026-04-01):** Pivoting from dual-base (R1-Distill-Qwen-32B + Qwen2.5-Coder-32B-Instruct) to single Qwen3.5-27B. Configs and docs updated. Next: cancel old SFT job, download Qwen3.5-27B to Delta, run baseline evals, simplify brain_manager.py and router code, verify inference pipeline compatibility (ThinkPRM, budget forcing), train HEP LoRA adapters.
+
+**Phase 4A trace generation (old model) completed** — 5,000 traces archived. Phase 4B SFT job (17177608) pending cancellation — was training adapter for deprecated R1-Distill-Qwen-32B.
+
+**Budget:** ~8,000 SUs total, ~76 SU spent. ~7,924 remaining for baseline evals, HEP LoRA training, and optional GRPO.
 
 ## Key Reference Documents
 
 - `docs/ARCHITECTURE.md` — How the components connect, data flow, interface contracts
 - `docs/ROADMAP.md` — What to build, in what order, with milestones
-- `docs/TRAINING_PIPELINE.md` — How to train the physics and code brains on Delta
+- `docs/TRAINING_PIPELINE.md` — How to train HEP LoRA adapters on Delta
 - `docs/DEPLOYMENT.md` — How to deploy on DGX Spark
 - `docs/MODELS.md` — Every model we use, its size, source, and purpose
 - `docs/API_SPEC.md` — The API contract between GRACE and JARVIS
