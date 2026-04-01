@@ -79,7 +79,7 @@ LOCAL_TRAIN_DATA=/tmp/train_data.jsonl
 # ZeRO-3 is REQUIRED: 32B model at fp16 = ~64 GB, exceeds single A100 40 GB.
 # QDoRA = Quantized DoRA (rank-32), targets all linear layers.
 
-deepspeed --num_gpus=4 -m training.physics.run_sft \
+deepspeed --num_gpus=4 --module training.physics.run_sft \
     --model_name_or_path "$BASE_MODEL" \
     --train_data "$LOCAL_TRAIN_DATA" \
     --output_dir "$OUTPUT_DIR" \
