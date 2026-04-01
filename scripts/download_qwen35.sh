@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Download Qwen3.5-27B (base) and Qwen3.5-1.5B (draft) to Delta.
+# Download Qwen3.5-27B (base) and Qwen3.5-0.8B (draft) to Delta.
 # Run this on a login node or inside a SLURM interactive session.
 #
 # Prerequisites:
@@ -55,11 +55,11 @@ download "Qwen/Qwen3.5-27B" \
 
 echo ""
 
-# Draft model: Qwen3.5-1.5B (for speculative decoding)
+# Draft model: Qwen3.5-0.8B (for speculative decoding)
 echo "--- Draft Model ---"
-download "Qwen/Qwen3.5-1.5B" \
+download "Qwen/Qwen3.5-0.8B" \
     "$MODEL_DIR/infrastructure/draft-model" \
-    "Qwen3.5-1.5B draft (~3 GB, must match base architecture)"
+    "Qwen3.5-0.8B draft (~1.6 GB, must match base architecture)"
 
 echo ""
 

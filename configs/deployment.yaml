@@ -28,12 +28,12 @@ deployment:
     qwen35_27b: 14.0
     router: 0.06
     think_prm: 0.8
-    draft_model: 0.8
+    draft_model: 0.4              # Qwen3.5-0.8B (or 0 if using native MTP)
     rag_index: 5.0
     active_lora: 0.3
-    total: 20.96
+    total: 20.56
 
-  available_for_specialists: 90.04  # ~25 specialist 7B models simultaneously
+  available_for_specialists: 90.44  # ~25 specialist 7B models simultaneously
 
 context_window:
   kv_cache_dtype: "fp8"

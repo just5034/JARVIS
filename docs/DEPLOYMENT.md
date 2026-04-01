@@ -75,7 +75,7 @@ bash scripts/download_models.sh
 
 # This downloads:
 # - Qwen3.5-27B (~14 GB at FP4)        — unified base brain
-# - Qwen3.5-1.5B (~0.8 GB)             — draft model for speculative decoding
+# - Qwen3.5-0.8B (~0.4 GB)             — draft model for speculative decoding (or use native MTP)
 # - ThinkPRM 1.5B (~0.8 GB)            — reasoning verifier
 # - ChemLLM-7B (~3.5 GB)               — chemistry specialist
 # - BioMistral-7B (~3.5 GB)            — biomedical specialist
@@ -123,7 +123,7 @@ memory_budget:
     qwen35_27b: 14.0              # Unified base brain
     router: 0.06
     think_prm: 0.8
-    draft_model: 0.8
+    draft_model: 0.4              # Qwen3.5-0.8B (or 0 if using native MTP)
     rag_index: 5.0
     active_lora: 0.3              # One adapter loaded at a time
     total: 20.96

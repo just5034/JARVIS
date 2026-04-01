@@ -87,7 +87,7 @@ permanent:
   - qwen35_27b: 14.0 GB          # Single unified base model (FP4)
   - router: 0.06 GB
   - think_prm: 0.8 GB            # ThinkPRM 1.5B verifier
-  - draft_model: 0.8 GB          # Speculative decoding draft (Qwen3.5-1.5B)
+  - draft_model: 0.4 GB          # Speculative decoding draft (Qwen3.5-0.8B)
   - rag_index: 5.0 GB            # FAISS physics knowledge base
   - framework_overhead: 7.0 GB   # vLLM + OS
   - total: ~27.66 GB

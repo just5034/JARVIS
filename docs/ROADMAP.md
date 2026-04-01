@@ -97,7 +97,7 @@
 - [ ] Simplify `src/jarvis/brains/brain_manager.py` — one always-resident base, remove multi-brain resolution
 - [ ] Verify ThinkPRM works with Qwen3.5's reasoning format (`<think>` tags)
 - [ ] Verify budget forcing conclusion markers match Qwen3.5 output patterns
-- [ ] Find compatible draft model for speculative decoding (Qwen3.5-1.5B or similar)
+- [x] Find compatible draft model for speculative decoding → Qwen3.5-0.8B (or native MTP)
 - [ ] Update tests to reflect single-base architecture
 - [ ] Update all docs (ARCHITECTURE.md, MODELS.md, DEPLOYMENT.md, TRAINING_PIPELINE.md)
 

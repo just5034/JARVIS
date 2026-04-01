@@ -71,11 +71,11 @@ These adapters are hot-swapped at runtime when the router detects HEP-specific c
 
 | Field | Value |
 |-------|-------|
-| **Model** | `Qwen/Qwen3.5-1.5B` (TBD — verify availability) |
-| **Parameters** | 1.5B |
-| **FP4 Size** | ~0.8 GB |
+| **Model** | `Qwen/Qwen3.5-0.8B` |
+| **Parameters** | 0.8B |
+| **FP4 Size** | ~0.4 GB |
 | **Purpose** | Proposes draft tokens for speculative decoding (2-3x throughput) |
-| **Note** | Must match Qwen3.5 architecture. If unavailable, fall back to smallest Qwen3.5 variant or disable speculative decoding. |
+| **Note** | Same Qwen3.5 architecture as base model. Alternative: Qwen3.5-27B has native MTP (Multi-Token Prediction) heads, which provides speculative decoding without a separate draft model. |
 
 ### RAG Embedding Model
 

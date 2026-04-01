@@ -35,11 +35,11 @@ infrastructure:
     load_policy: "always_resident"
 
   draft_model:
-    model_id: "Qwen/Qwen3.5-1.5B"
+    model_id: "Qwen/Qwen3.5-0.8B"
     path: "/models/infrastructure/draft-model"
-    size_gb: 0.8
+    size_gb: 0.4
     load_policy: "always_resident"
-    note: "Must match Qwen3.5 architecture for speculative decoding. Verify availability on HuggingFace."
+    note: "Must match Qwen3.5 architecture. Alternative: use native MTP (--speculative-config '{\"method\": \"mtp\", \"num_speculative_tokens\": 4}') which requires no draft model."
 
   rag_embedding:
     model_id: "sentence-transformers/all-MiniLM-L6-v2"

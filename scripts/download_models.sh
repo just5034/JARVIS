@@ -42,9 +42,9 @@ download "Qwen/Qwen3.5-27B" \
 # Infrastructure
 echo ""
 echo "--- Infrastructure ---"
-download "Qwen/Qwen3.5-1.5B" \
+download "Qwen/Qwen3.5-0.8B" \
     "$MODEL_DIR/infrastructure/draft-model" \
-    "Draft model for speculative decoding (~3GB, must match Qwen3.5 arch)"
+    "Draft model for speculative decoding (~1.6GB, must match Qwen3.5 arch)"
 
 download "PRIME-RL/ThinkPRM-1.5B" \
     "$MODEL_DIR/infrastructure/think-prm" \
