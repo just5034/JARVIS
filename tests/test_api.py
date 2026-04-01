@@ -167,7 +167,7 @@ def test_admin_load_unknown_model(client: TestClient) -> None:
 def test_admin_load_invalid_action(client: TestClient) -> None:
     response = client.post(
         "/admin/load",
-        json={"model": "r1_distill_qwen_32b", "action": "restart"},
+        json={"model": "qwen35_27b", "action": "restart"},
     )
     assert response.status_code == 400
 

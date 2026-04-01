@@ -135,21 +135,21 @@ class TestRouter:
         r = Router(config)
         decision = r.route("Calculate the decay width of the Higgs boson")
         assert decision.domain == "physics"
-        assert decision.base_model == "r1_distill_qwen_32b"
+        assert decision.base_model == "qwen35_27b"
         assert decision.specialist is None
 
     def test_code_routing(self, config: JarvisConfig) -> None:
         r = Router(config)
         decision = r.route("Write a Python function to implement binary search")
         assert decision.domain == "code"
-        assert decision.base_model == "qwen25_coder_32b"
+        assert decision.base_model == "qwen35_27b"
 
     def test_math_routing(self, config: JarvisConfig) -> None:
         r = Router(config)
         decision = r.route("Prove that there are infinitely many prime numbers")
         assert decision.domain == "math"
-        assert decision.base_model == "r1_distill_qwen_32b"
-        assert decision.adapter == "math_adapter"
+        assert decision.base_model == "qwen35_27b"
+        assert decision.adapter is None
 
     def test_chemistry_routes_to_specialist(self, config: JarvisConfig) -> None:
         r = Router(config)
@@ -163,14 +163,14 @@ class TestRouter:
         decision = r.route("Simulate the ATLAS detector response for Higgs decay")
         assert decision.domain == "physics"
         assert decision.is_hep is True
-        assert decision.adapter == "physics_hep"
+        assert decision.adapter == "hep_physics"
 
     def test_code_hep_adapter(self, config: JarvisConfig) -> None:
         r = Router(config)
         decision = r.route("Write code to run a Geant4 Monte Carlo simulation")
         assert decision.domain == "code"
         assert decision.is_hep is True
-        assert decision.adapter == "code_hep"
+        assert decision.adapter == "hep_code"
 
     def test_forced_domain(self, config: JarvisConfig) -> None:
         r = Router(config)

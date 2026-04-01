@@ -92,7 +92,7 @@ def test_brain_manager_load_requires_vllm(config: JarvisConfig) -> None:
     mgr = BrainManager(config)
     # On Windows/CI without vLLM, this should raise ImportError
     with pytest.raises((ImportError, Exception)):
-        mgr.load_base_model("r1_distill_qwen_32b")
+        mgr.load_base_model("qwen35_27b")
 
 
 def test_brain_manager_with_mock_model(config: JarvisConfig) -> None:
@@ -143,50 +143,39 @@ def test_generation_result() -> None:
 # --- Adapter constraint enforcement ---
 
 
-def test_swap_adapter_cross_base_rejected(config: JarvisConfig) -> None:
-    """Code adapter must not load on physics base model."""
-    mgr = BrainManager(config)
-    mock_handle = MagicMock(spec=LoadedModelHandle)
-    mgr._models["r1_distill_qwen_32b"] = mock_handle
-    mgr._active_adapters["r1_distill_qwen_32b"] = None
-
-    with pytest.raises(ValueError, match="cannot be loaded on"):
-        mgr.swap_adapter("r1_distill_qwen_32b", "code_general")
-
-
 def test_swap_adapter_same_base_accepted(config: JarvisConfig) -> None:
-    """Physics adapter on physics base should work."""
+    """HEP physics adapter on qwen35_27b should work."""
     mgr = BrainManager(config)
     mock_handle = MagicMock(spec=LoadedModelHandle)
-    mgr._models["r1_distill_qwen_32b"] = mock_handle
-    mgr._active_adapters["r1_distill_qwen_32b"] = None
+    mgr._models["qwen35_27b"] = mock_handle
+    mgr._active_adapters["qwen35_27b"] = None
 
-    mgr.swap_adapter("r1_distill_qwen_32b", "physics_general")
-    assert mgr.get_active_adapter("r1_distill_qwen_32b") == "physics_general"
+    mgr.swap_adapter("qwen35_27b", "hep_physics")
+    assert mgr.get_active_adapter("qwen35_27b") == "hep_physics"
 
 
 def test_swap_adapter_clear(config: JarvisConfig) -> None:
     """Setting adapter to None clears it."""
     mgr = BrainManager(config)
     mock_handle = MagicMock(spec=LoadedModelHandle)
-    mgr._models["r1_distill_qwen_32b"] = mock_handle
-    mgr._active_adapters["r1_distill_qwen_32b"] = "physics_general"
+    mgr._models["qwen35_27b"] = mock_handle
+    mgr._active_adapters["qwen35_27b"] = "hep_physics"
 
-    mgr.swap_adapter("r1_distill_qwen_32b", None)
-    assert mgr.get_active_adapter("r1_distill_qwen_32b") is None
+    mgr.swap_adapter("qwen35_27b", None)
+    assert mgr.get_active_adapter("qwen35_27b") is None
 
 
 def test_swap_adapter_unknown_base(config: JarvisConfig) -> None:
     mgr = BrainManager(config)
     with pytest.raises(ValueError, match="not loaded"):
-        mgr.swap_adapter("nonexistent", "physics_general")
+        mgr.swap_adapter("nonexistent", "hep_physics")
 
 
 def test_swap_adapter_unknown_adapter(config: JarvisConfig) -> None:
     mgr = BrainManager(config)
     mock_handle = MagicMock(spec=LoadedModelHandle)
-    mgr._models["r1_distill_qwen_32b"] = mock_handle
-    mgr._active_adapters["r1_distill_qwen_32b"] = None
+    mgr._models["qwen35_27b"] = mock_handle
+    mgr._active_adapters["qwen35_27b"] = None
 
     with pytest.raises(ValueError, match="Unknown adapter"):
-        mgr.swap_adapter("r1_distill_qwen_32b", "nonexistent_adapter")
+        mgr.swap_adapter("qwen35_27b", "nonexistent_adapter")

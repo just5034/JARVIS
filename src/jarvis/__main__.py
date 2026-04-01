@@ -117,7 +117,7 @@ def main() -> None:
         "--load-model",
         type=str,
         default=None,
-        help="Model key(s) to load at startup, comma-separated (e.g., 'r1_distill_qwen_32b,qwen25_coder_32b')",
+        help="Model key(s) to load at startup, comma-separated (e.g., 'qwen35_27b')",
     )
 
     # validate

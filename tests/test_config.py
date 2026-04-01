@@ -6,16 +6,13 @@ from jarvis.config import JarvisConfig
 
 
 def test_models_yaml_parses(jarvis_config: JarvisConfig) -> None:
-    assert len(jarvis_config.models.base_models) >= 2
-    assert "r1_distill_qwen_32b" in jarvis_config.models.base_models
-    assert "qwen25_coder_32b" in jarvis_config.models.base_models
+    assert len(jarvis_config.models.base_models) >= 1
+    assert "qwen35_27b" in jarvis_config.models.base_models
 
 
-def test_base_model_architectures(jarvis_config: JarvisConfig) -> None:
-    physics_base = jarvis_config.models.base_models["r1_distill_qwen_32b"]
-    code_base = jarvis_config.models.base_models["qwen25_coder_32b"]
-    assert physics_base.architecture == "qwen2.5"
-    assert code_base.architecture == "qwen2.5"
+def test_base_model_architecture(jarvis_config: JarvisConfig) -> None:
+    base = jarvis_config.models.base_models["qwen35_27b"]
+    assert base.architecture == "qwen3.5"
 
 
 def test_inference_yaml_parses(jarvis_config: JarvisConfig) -> None:
@@ -43,16 +40,10 @@ def test_adapter_base_model_constraint(jarvis_config: JarvisConfig) -> None:
         )
 
 
-def test_physics_adapters_on_correct_base(jarvis_config: JarvisConfig) -> None:
+def test_hep_adapters_on_correct_base(jarvis_config: JarvisConfig) -> None:
     adapters = jarvis_config.models.lora_adapters
-    assert adapters["physics_general"].base_model == "r1_distill_qwen_32b"
-    assert adapters["physics_hep"].base_model == "r1_distill_qwen_32b"
-
-
-def test_code_adapters_on_correct_base(jarvis_config: JarvisConfig) -> None:
-    adapters = jarvis_config.models.lora_adapters
-    assert adapters["code_general"].base_model == "qwen25_coder_32b"
-    assert adapters["code_hep"].base_model == "qwen25_coder_32b"
+    assert adapters["hep_physics"].base_model == "qwen35_27b"
+    assert adapters["hep_code"].base_model == "qwen35_27b"
 
 
 def test_memory_budget_fits(jarvis_config: JarvisConfig) -> None:
