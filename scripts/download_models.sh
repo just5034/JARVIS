@@ -33,28 +33,18 @@ echo "=== JARVIS Model Download ==="
 echo "Target directory: $MODEL_DIR"
 echo ""
 
-# Core brains
-echo "--- Core Brains ---"
-download "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B" \
-    "$MODEL_DIR/brains/r1-distill-qwen-32b" \
-    "Physics base (Qwen2.5, ~16GB FP4)"
-
-download "Qwen/Qwen2.5-Coder-32B-Instruct" \
-    "$MODEL_DIR/brains/qwen3-32b" \
-    "Code base (Qwen3, ~16GB FP4)"
-
-if [ "$SKIP_OPTIONAL" = false ]; then
-    download "deepseek-ai/DeepSeek-R1-Distill-Llama-70B" \
-        "$MODEL_DIR/brains/r1-distill-llama-70b" \
-        "Math brain (optional, ~35GB FP4)"
-fi
+# Core base model
+echo "--- Base Model ---"
+download "Qwen/Qwen3.5-27B" \
+    "$MODEL_DIR/brains/qwen3.5-27b" \
+    "Unified base (Qwen3.5, ~27GB raw, ~14GB FP4)"
 
 # Infrastructure
 echo ""
 echo "--- Infrastructure ---"
-download "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" \
+download "Qwen/Qwen3.5-1.5B" \
     "$MODEL_DIR/infrastructure/draft-model" \
-    "Draft model for speculative decoding (~0.8GB)"
+    "Draft model for speculative decoding (~3GB, must match Qwen3.5 arch)"
 
 download "PRIME-RL/ThinkPRM-1.5B" \
     "$MODEL_DIR/infrastructure/think-prm" \

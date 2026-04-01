@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Phase 4A: Self-distillation — generate physics reasoning traces
-# using R1-Distill-Qwen-32B as its own teacher on A100 GPUs.
+# Phase 4A-new: HEP data curation — generate physics reasoning traces
+# using Qwen3.5-27B as teacher on A100 GPUs.
 #
-# Generates 8 traces per problem (866 problems × 8 = ~6,928 traces).
+# Generates 8 traces per problem for HEP-specific training data.
 # After generation, runs rejection sampling to filter to best traces.
 #
-# Budget: ~200-350 SU (4 GPUs × 50-90 hrs × 1 SU/GPU-hr)
+# Budget: ~50 SU (4 GPUs × ~12 hours)
 #
 # Prerequisites:
-#   - Model: /projects/bgde/jhill5/models/r1-distill-qwen-32b
+#   - Model: /projects/bgde/jhill5/models/qwen3.5-27b
 #   - Physics problems: /scratch/bgde/jhill5/data/physics_problems.jsonl
+#   - Baseline evals passed (run_eval_all.sh)
 #
 # Usage:
 #   sbatch scripts/run_trace_generation.sh
 
-#SBATCH --job-name=jarvis-traces
+#SBATCH --job-name=jarvis-hep-traces
 #SBATCH --account=bgde-delta-gpu
 #SBATCH --partition=gpuA100x4
 #SBATCH --nodes=1
@@ -22,11 +23,11 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=240G
-#SBATCH --time=48:00:00
+#SBATCH --time=24:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/traces-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/traces-%j.err
+#SBATCH --output=/scratch/bgde/jhill5/logs/hep-traces-%j.out
+#SBATCH --error=/scratch/bgde/jhill5/logs/hep-traces-%j.err
 
 set -euo pipefail
 
@@ -43,31 +44,33 @@ export HF_HOME=/scratch/bgde/jhill5/hf_cache
 export PYTHONUNBUFFERED=1
 export NCCL_DEBUG=INFO
 export NCCL_SOCKET_IFNAME=hsn
-export VLLM_LOGGING_LEVEL=DEBUG
+export VLLM_LOGGING_LEVEL=WARNING
 
 # ─── Paths ───
-TEACHER_MODEL="/projects/bgde/jhill5/models/r1-distill-qwen-32b"
+TEACHER_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
 PROBLEMS="/scratch/bgde/jhill5/data/physics_problems.jsonl"
-OUTPUT_DIR="/scratch/bgde/jhill5/data/physics_traces"
+OUTPUT_DIR="/scratch/bgde/jhill5/data/hep_traces"
 VLLM_PORT=8192
 
-echo "=== JARVIS Phase 4A: Self-Distillation Trace Generation ==="
+echo "=== JARVIS Phase 4A-new: HEP Trace Generation (Qwen3.5-27B) ==="
 echo "Job ID:  $SLURM_JOB_ID"
 echo "Node:    $(hostname)"
 echo "GPUs:    $(nvidia-smi -L | wc -l)"
 echo "Model:   $TEACHER_MODEL"
-echo "Problems: $(wc -l < $PROBLEMS) problems"
+echo "Problems: $(wc -l < $PROBLEMS 2>/dev/null || echo 'FILE NOT FOUND') problems"
 echo "Date:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
 
 # ─── Validate inputs ───
 if [ ! -d "$TEACHER_MODEL" ]; then
-    echo "ERROR: teacher model not found at $TEACHER_MODEL"
+    echo "ERROR: Qwen3.5-27B not found at $TEACHER_MODEL"
+    echo "Run: bash scripts/download_qwen35.sh"
     exit 1
 fi
 
 if [ ! -f "$PROBLEMS" ]; then
     echo "ERROR: physics problems not found at $PROBLEMS"
+    echo "Generate with: python -m training.data.build_physics_problems"
     exit 1
 fi
 
@@ -76,12 +79,12 @@ mkdir -p "$OUTPUT_DIR" /scratch/bgde/jhill5/logs
 # ─── Sanity checks ───
 echo "Python: $(which python)"
 echo "vLLM version: $(python -c 'import vllm; print(vllm.__version__)')"
-echo "PyTorch version: $(python -c 'import torch; print(torch.__version__); print("CUDA:", torch.cuda.is_available(), torch.cuda.device_count(), "GPUs")')"
+echo "PyTorch: $(python -c 'import torch; print(torch.__version__, "CUDA:", torch.cuda.is_available(), torch.cuda.device_count(), "GPUs")')"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader
 echo ""
 
 # ─── Start vLLM server in background ───
-VLLM_LOG="/scratch/bgde/jhill5/logs/vllm-${SLURM_JOB_ID}.log"
+VLLM_LOG="/scratch/bgde/jhill5/logs/vllm-hep-traces-${SLURM_JOB_ID}.log"
 echo "Starting vLLM server with tensor parallelism=4..."
 echo "vLLM log: $VLLM_LOG"
 python -m vllm.entrypoints.openai.api_server \
@@ -95,7 +98,7 @@ python -m vllm.entrypoints.openai.api_server \
     > "$VLLM_LOG" 2>&1 &
 VLLM_PID=$!
 
-# Wait for server to be ready (up to 30 min — vLLM import ~6min, model load ~2min, KV cache + compile ~5min)
+# Wait for server (up to 30 min)
 echo "Waiting for vLLM server to start..."
 for i in $(seq 1 360); do
     if curl -s http://localhost:$VLLM_PORT/health > /dev/null 2>&1; then
@@ -106,24 +109,20 @@ for i in $(seq 1 360); do
         echo "ERROR: vLLM server died during startup"
         echo "=== Last 50 lines of vLLM log ==="
         tail -50 "$VLLM_LOG"
-        echo "=== End vLLM log ==="
         exit 1
     fi
     sleep 5
 done
 
-# Verify server is up
 if ! curl -s http://localhost:$VLLM_PORT/health > /dev/null 2>&1; then
     echo "ERROR: vLLM server failed to start after 1800s"
-    echo "=== Last 100 lines of vLLM log ==="
     tail -100 "$VLLM_LOG"
-    echo "=== End vLLM log ==="
     kill $VLLM_PID 2>/dev/null
     exit 1
 fi
 
 echo ""
-echo "=== Generating traces (8 per problem) ==="
+echo "=== Generating HEP traces (8 per problem) ==="
 python training/physics/generate_traces_api.py \
     --problems "$PROBLEMS" \
     --output "$OUTPUT_DIR" \
@@ -149,11 +148,13 @@ echo ""
 echo "=== Running rejection sampling ==="
 python training/physics/rejection_sample.py \
     --traces "$OUTPUT_DIR/traces.jsonl" \
-    --output "/scratch/bgde/jhill5/data/physics_filtered.jsonl" \
+    --output "/scratch/bgde/jhill5/data/hep_physics_filtered.jsonl" \
     --target-count 5000 \
     --require-correct
 
 echo ""
-echo "=== Phase 4A Complete ==="
+echo "=== Phase 4A-new Complete ==="
 echo "Raw traces: $OUTPUT_DIR/traces.jsonl"
-echo "Filtered traces: /scratch/bgde/jhill5/data/physics_filtered.jsonl"
+echo "Filtered traces: /scratch/bgde/jhill5/data/hep_physics_filtered.jsonl"
+echo ""
+echo "Next: sbatch scripts/run_hep_sft.sh"
