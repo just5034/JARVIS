@@ -23,6 +23,7 @@ from training.eval.base import (
     generate_batch,
     load_model,
     make_arg_parser,
+    strip_thinking,
 )
 
 
@@ -133,7 +134,7 @@ def evaluate(args) -> dict:
     domain_total: dict[str, int] = {}
 
     for problem, responses in zip(problems, all_responses):
-        response_text = responses[0]
+        response_text = strip_thinking(responses[0])
         predicted = extract_choice(response_text)
         is_correct = predicted == problem["correct"]
         if is_correct:

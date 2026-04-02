@@ -30,6 +30,7 @@ from training.eval.base import (
     generate_batch,
     load_model,
     make_arg_parser,
+    strip_thinking,
 )
 
 
@@ -380,7 +381,7 @@ def evaluate(args) -> dict:
     by_difficulty: dict[str, dict] = {}
 
     for problem, responses in zip(problems, all_responses):
-        response_text = responses[0]
+        response_text = strip_thinking(responses[0])
         code = extract_python_code(response_text)
 
         test_cases = problem.get("test_cases", [])

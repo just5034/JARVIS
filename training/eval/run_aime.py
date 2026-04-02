@@ -21,6 +21,7 @@ from training.eval.base import (
     generate_batch,
     load_model,
     make_arg_parser,
+    strip_thinking,
 )
 
 
@@ -119,7 +120,7 @@ def evaluate(args) -> dict:
     details = []
 
     for problem, responses in zip(problems, all_responses):
-        response_text = responses[0]
+        response_text = strip_thinking(responses[0])
         predicted = normalize_answer(extract_numeric(response_text))
         expected = normalize_answer(problem["answer"])
         is_correct = predicted == expected

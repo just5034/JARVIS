@@ -115,14 +115,23 @@ def generate_batch(
     )
 
     # Apply chat template — all JARVIS eval models are instruct/chat models
-    # that expect special tokens (e.g., Qwen2.5 ChatML format).
+    # that expect special tokens (e.g., Qwen2.5 ChatML, Qwen3.5 thinking mode).
     tokenizer = llm.get_tokenizer()
     formatted_prompts = []
     for prompt in prompts:
         messages = [{"role": "user", "content": prompt}]
-        formatted = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        # enable_thinking=True activates Qwen3.5's <think>...</think> reasoning
+        # mode. For models that don't support it, the kwarg is silently ignored.
+        try:
+            formatted = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+                enable_thinking=True,
+            )
+        except TypeError:
+            # Fallback for tokenizers that don't accept enable_thinking
+            formatted = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
         formatted_prompts.append(formatted)
 
     kwargs = {}
@@ -138,6 +147,15 @@ def generate_batch(
         completions = [o.text for o in output.outputs]
         results.append(completions)
     return results
+
+
+def strip_thinking(text: str) -> str:
+    """Remove <think>...</think> blocks from model output.
+
+    Qwen3.5 wraps reasoning in these tags when thinking mode is enabled.
+    Stripping them gives clean output for answer/code extraction.
+    """
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
 def extract_boxed_answer(text: str) -> str | None:
