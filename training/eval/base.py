@@ -115,23 +115,16 @@ def generate_batch(
     )
 
     # Apply chat template — all JARVIS eval models are instruct/chat models
-    # that expect special tokens (e.g., Qwen2.5 ChatML, Qwen3.5 thinking mode).
+    # that expect special tokens (e.g., Qwen2.5 ChatML, Qwen3.5).
+    # Note: Qwen3.5 produces "Thinking Process:...\\n</think>" by default.
+    # We strip thinking blocks in each eval script via strip_thinking().
     tokenizer = llm.get_tokenizer()
     formatted_prompts = []
     for prompt in prompts:
         messages = [{"role": "user", "content": prompt}]
-        # enable_thinking=True activates Qwen3.5's <think>...</think> reasoning
-        # mode. For models that don't support it, the kwarg is silently ignored.
-        try:
-            formatted = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
-                enable_thinking=True,
-            )
-        except TypeError:
-            # Fallback for tokenizers that don't accept enable_thinking
-            formatted = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
-            )
+        formatted = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+        )
         formatted_prompts.append(formatted)
 
     kwargs = {}
@@ -150,12 +143,28 @@ def generate_batch(
 
 
 def strip_thinking(text: str) -> str:
-    """Remove <think>...</think> blocks from model output.
+    """Remove thinking/reasoning blocks from model output.
 
-    Qwen3.5 wraps reasoning in these tags when thinking mode is enabled.
-    Stripping them gives clean output for answer/code extraction.
+    Handles two formats:
+    1. Qwen3.5 tag format: <think>...</think>answer
+    2. Qwen3.5 visible format: Thinking Process:...\\n</think>answer
+
+    In both cases, we keep only the text AFTER the last </think> tag.
+    If no </think> is found, strips "Thinking Process:" prefix blocks.
     """
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    # If </think> is present, keep only what comes after it
+    if "</think>" in text:
+        _, _, after = text.rpartition("</think>")
+        after = after.strip()
+        if after:
+            return after
+
+    # Also try <think>...</think> regex (in case of nested or malformed)
+    stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    if stripped:
+        return stripped
+
+    return text
 
 
 def extract_boxed_answer(text: str) -> str | None:
