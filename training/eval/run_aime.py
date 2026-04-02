@@ -120,8 +120,12 @@ def evaluate(args) -> dict:
     details = []
 
     for problem, responses in zip(problems, all_responses):
-        response_text = strip_thinking(responses[0])
-        predicted = normalize_answer(extract_numeric(response_text))
+        full_text = responses[0]
+        # Try answer from post-thinking text first, fall back to full output
+        after_think = strip_thinking(full_text)
+        predicted = normalize_answer(extract_numeric(after_think))
+        if predicted is None:
+            predicted = normalize_answer(extract_numeric(full_text))
         expected = normalize_answer(problem["answer"])
         is_correct = predicted == expected
 

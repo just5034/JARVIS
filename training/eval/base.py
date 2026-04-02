@@ -143,35 +143,30 @@ def generate_batch(
 
 
 def strip_thinking(text: str) -> str:
-    """Remove thinking/reasoning blocks from model output.
+    """Extract the final answer portion from model output with thinking.
 
-    Handles two formats:
-    1. Qwen3.5 tag format: <think>...</think>answer
-    2. Qwen3.5 visible format: Thinking Process:...\\n</think>answer
-
-    In both cases, we keep only the text AFTER the last </think> tag.
-    If no </think> is found, strips "Thinking Process:" prefix blocks.
+    Qwen3.5 outputs: "Thinking Process:...reasoning...</think>final answer"
+    We try to get the text after </think>, but if that's empty or missing,
+    we return the FULL text so extractors can search the entire output.
     """
-    # If </think> is present, keep only what comes after it
     if "</think>" in text:
         _, _, after = text.rpartition("</think>")
         after = after.strip()
         if after:
             return after
-
-    # Also try <think>...</think> regex (in case of nested or malformed)
-    stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    if stripped:
-        return stripped
-
+    # No </think> or nothing after it — return full text for extractors
     return text
 
 
 def extract_boxed_answer(text: str) -> str | None:
-    r"""Extract answer from \boxed{...} in model output."""
-    match = re.search(r"\\boxed\{([^}]*)\}", text)
-    if match:
-        return match.group(1).strip()
+    r"""Extract the LAST \boxed{...} answer from model output.
+
+    Uses the last match because thinking text may contain intermediate
+    \boxed{} calculations before the final answer.
+    """
+    matches = re.findall(r"\\boxed\{([^}]*)\}", text)
+    if matches:
+        return matches[-1].strip()
     return None
 
 

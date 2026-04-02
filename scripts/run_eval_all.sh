@@ -135,7 +135,7 @@ if $RUN_MATH; then
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
         --experiment "qwen35_baseline_aime" \
-        --temperature 0.6
+        --temperature 0.0
 
     python -c "
 import json

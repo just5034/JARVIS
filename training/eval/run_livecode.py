@@ -381,8 +381,10 @@ def evaluate(args) -> dict:
     by_difficulty: dict[str, dict] = {}
 
     for problem, responses in zip(problems, all_responses):
-        response_text = strip_thinking(responses[0])
-        code = extract_python_code(response_text)
+        full_text = responses[0]
+        # Extract code from full output — code blocks often live inside
+        # the thinking section, so don't strip them
+        code = extract_python_code(full_text)
 
         test_cases = problem.get("test_cases", [])
         if not test_cases:
