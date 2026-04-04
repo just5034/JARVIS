@@ -132,14 +132,18 @@ def evaluate(args) -> dict:
         if is_correct:
             correct += 1
 
-        details.append({
+        detail = {
             "problem": problem["problem"][:200],
             "expected": expected,
             "predicted": predicted,
             "is_correct": is_correct,
             "contest": problem.get("contest", ""),
             "number": problem.get("number", ""),
-        })
+        }
+        # Store response tail for wrong answers to debug extraction
+        if not is_correct:
+            detail["response_tail"] = full_text[-500:] if full_text else ""
+        details.append(detail)
 
     accuracy = correct / len(problems) if problems else 0
     metrics = {

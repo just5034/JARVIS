@@ -214,54 +214,28 @@ def extract_choice(text: str) -> str | None:
     return None
 
 
-def _boxed_to_int(boxed: str) -> str | None:
-    """Try to resolve a \\boxed{} content to an integer string.
-
-    Handles: plain integers ("315"), LaTeX expressions ("3\\cdot 5^{2}"),
-    and comma-separated numbers ("1,234").
-    """
-    # Strip leading/trailing whitespace and $ signs
-    s = boxed.strip().strip("$").strip()
-
-    # Plain integer
-    if re.fullmatch(r"\d+", s):
-        return s
-
-    # Comma-separated integer like "1,234"
-    no_comma = s.replace(",", "")
-    if re.fullmatch(r"\d+", no_comma):
-        return no_comma
-
-    # Try evaluating simple LaTeX math: replace \cdot with *, \times with *,
-    # ^{n} with **n, \frac{a}{b} with (a)/(b)
-    expr = s
-    expr = re.sub(r"\\(?:cdot|times)", "*", expr)
-    expr = re.sub(r"\^{(\d+)}", r"**\1", expr)
-    expr = re.sub(r"\^(\d)", r"**\1", expr)
-    expr = re.sub(r"\\frac{(\d+)}{(\d+)}", r"(\1)/(\2)", expr)
-    expr = re.sub(r"[{}\\]", "", expr)  # remove remaining LaTeX
-    expr = expr.strip()
-
-    try:
-        val = eval(expr)  # safe: only digits and arithmetic ops after cleaning
-        if isinstance(val, (int, float)) and val == int(val):
-            return str(int(val))
-    except Exception:
-        pass
-
-    return None
-
-
 def extract_numeric(text: str) -> str | None:
-    """Extract a numeric answer from model output (for AIME-style problems)."""
+    """Extract a numeric answer from model output (for AIME-style problems).
+
+    For AIME, answers are always plain integers 0-999. We extract the boxed
+    content and look for the integer within it. No LaTeX math evaluation —
+    the model should give a plain number in \\boxed{}.
+    """
     # Look for boxed answer first
     boxed = extract_boxed_answer(text)
     if boxed:
-        resolved = _boxed_to_int(boxed)
-        if resolved is not None:
-            return resolved
-        # If boxed content can't be resolved, try to find a number in it
-        nums = re.findall(r"\d+", boxed)
+        # Strip whitespace and $ signs
+        s = boxed.strip().strip("$").strip()
+        # Plain integer
+        if re.fullmatch(r"\d+", s):
+            return s
+        # Comma-separated like "1,234"
+        no_comma = s.replace(",", "")
+        if re.fullmatch(r"\d+", no_comma):
+            return no_comma
+        # Boxed content has LaTeX — find the last standalone integer in it
+        # (e.g. \boxed{315} with nested braces still has "315" somewhere)
+        nums = re.findall(r"\d+", s)
         if nums:
             return nums[-1]
 
