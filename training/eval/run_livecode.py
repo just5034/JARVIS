@@ -33,6 +33,9 @@ from training.eval.base import (
     strip_thinking,
 )
 
+# Matches base.py strip_thinking — used to try post-think extraction first
+_strip_thinking = strip_thinking
+
 
 # Prompt for stdin/stdout problems (Codeforces/AtCoder style)
 STDIN_PROMPT = """You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests. You will NOT return anything except for the program.
@@ -134,26 +137,25 @@ def load_livecode(data_dir: str) -> list[dict]:
     return problems
 
 
-def extract_python_code(text: str) -> str | None:
-    """Extract the LAST code block from model output (matches official harness)."""
+def _extract_from_fences(text: str) -> str | None:
+    """Extract the LAST fenced code block from text."""
     lines = text.split("\n")
-
-    # Find all lines containing ```
     fence_indices = [i for i, line in enumerate(lines) if "```" in line]
 
-    # Need at least 2 fences to form a block
     if len(fence_indices) >= 2:
-        # Take content between the last pair of fences
         start = fence_indices[-2] + 1
         end = fence_indices[-1]
         code = "\n".join(lines[start:end]).strip()
         if code:
             return code
+    return None
 
-    # Fallback: look for code-like content
+
+def _extract_from_heuristic(text: str) -> str | None:
+    """Fallback: look for code-like content."""
     code_lines = []
     in_code = False
-    for line in lines:
+    for line in text.split("\n"):
         if re.match(r"^(import |from |def |class |if |for |while |print|sys\.)", line):
             in_code = True
         if in_code:
@@ -161,8 +163,36 @@ def extract_python_code(text: str) -> str | None:
 
     if code_lines:
         return "\n".join(code_lines).strip()
-
     return None
+
+
+def extract_python_code(text: str) -> str | None:
+    """Extract the LAST code block from model output.
+
+    Strategy: try the post-thinking text first (after </think>),
+    then fall back to the full output. This prevents grabbing
+    exploratory code from Qwen3.5's thinking section.
+    """
+    # 1. Try post-thinking text first (where the final answer should be)
+    after_think = _strip_thinking(text)
+    if after_think != text:  # thinking was actually stripped
+        code = _extract_from_fences(after_think)
+        if code:
+            return code
+
+    # 2. Fall back to full text (covers models without thinking)
+    code = _extract_from_fences(text)
+    if code:
+        return code
+
+    # 3. Heuristic fallback on post-thinking text
+    if after_think != text:
+        code = _extract_from_heuristic(after_think)
+        if code:
+            return code
+
+    # 4. Heuristic fallback on full text
+    return _extract_from_heuristic(text)
 
 
 def get_problem_type(problem: dict) -> str:
@@ -382,8 +412,6 @@ def evaluate(args) -> dict:
 
     for problem, responses in zip(problems, all_responses):
         full_text = responses[0]
-        # Extract code from full output — code blocks often live inside
-        # the thinking section, so don't strip them
         code = extract_python_code(full_text)
 
         test_cases = problem.get("test_cases", [])
@@ -399,11 +427,13 @@ def evaluate(args) -> dict:
         total_with_tests += 1
 
         if code is None:
+            # Store tail of response for debugging extraction failures
             details.append({
                 "id": problem["id"],
                 "title": problem.get("title", ""),
                 "passed": False,
                 "reason": "no_code_extracted",
+                "response_tail": full_text[-500:] if full_text else "",
             })
             continue
 

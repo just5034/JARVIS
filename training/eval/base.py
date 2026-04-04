@@ -163,10 +163,30 @@ def extract_boxed_answer(text: str) -> str | None:
 
     Uses the last match because thinking text may contain intermediate
     \boxed{} calculations before the final answer.
+    Handles nested braces like \boxed{3\cdot 5^{2}}.
     """
-    matches = re.findall(r"\\boxed\{([^}]*)\}", text)
+    matches = []
+    i = 0
+    while i < len(text):
+        idx = text.find(r"\boxed{", i)
+        if idx == -1:
+            break
+        # Find matching close brace, accounting for nesting
+        start = idx + len(r"\boxed{")
+        depth = 1
+        j = start
+        while j < len(text) and depth > 0:
+            if text[j] == "{":
+                depth += 1
+            elif text[j] == "}":
+                depth -= 1
+            j += 1
+        if depth == 0:
+            matches.append(text[start : j - 1].strip())
+        i = j if depth == 0 else idx + 1
+
     if matches:
-        return matches[-1].strip()
+        return matches[-1]
     return None
 
 
@@ -194,12 +214,56 @@ def extract_choice(text: str) -> str | None:
     return None
 
 
+def _boxed_to_int(boxed: str) -> str | None:
+    """Try to resolve a \\boxed{} content to an integer string.
+
+    Handles: plain integers ("315"), LaTeX expressions ("3\\cdot 5^{2}"),
+    and comma-separated numbers ("1,234").
+    """
+    # Strip leading/trailing whitespace and $ signs
+    s = boxed.strip().strip("$").strip()
+
+    # Plain integer
+    if re.fullmatch(r"\d+", s):
+        return s
+
+    # Comma-separated integer like "1,234"
+    no_comma = s.replace(",", "")
+    if re.fullmatch(r"\d+", no_comma):
+        return no_comma
+
+    # Try evaluating simple LaTeX math: replace \cdot with *, \times with *,
+    # ^{n} with **n, \frac{a}{b} with (a)/(b)
+    expr = s
+    expr = re.sub(r"\\(?:cdot|times)", "*", expr)
+    expr = re.sub(r"\^{(\d+)}", r"**\1", expr)
+    expr = re.sub(r"\^(\d)", r"**\1", expr)
+    expr = re.sub(r"\\frac{(\d+)}{(\d+)}", r"(\1)/(\2)", expr)
+    expr = re.sub(r"[{}\\]", "", expr)  # remove remaining LaTeX
+    expr = expr.strip()
+
+    try:
+        val = eval(expr)  # safe: only digits and arithmetic ops after cleaning
+        if isinstance(val, (int, float)) and val == int(val):
+            return str(int(val))
+    except Exception:
+        pass
+
+    return None
+
+
 def extract_numeric(text: str) -> str | None:
     """Extract a numeric answer from model output (for AIME-style problems)."""
     # Look for boxed answer first
     boxed = extract_boxed_answer(text)
     if boxed:
-        return boxed
+        resolved = _boxed_to_int(boxed)
+        if resolved is not None:
+            return resolved
+        # If boxed content can't be resolved, try to find a number in it
+        nums = re.findall(r"\d+", boxed)
+        if nums:
+            return nums[-1]
 
     # Look for "the answer is X" patterns
     match = re.search(r"[Tt]he\s+answer\s+is\s*[:\s]*(\d+)", text)
