@@ -286,7 +286,7 @@ Verification:
 Extract only HIGH confidence facts and LOW confidence failures. Skip MEDIUM."""
 
 
-def run_aria(llm: LLMBackend, problem: str, max_passes: int = 2, verbose: bool = True) -> dict:
+def run_aria(llm: LLMBackend, problem: str, max_passes: int = 2, verbose: bool = True, max_tokens: int = 4096) -> dict:
     """Run ARIA multi-pass reasoning on a single problem."""
 
     cache = ReasoningCache()
@@ -306,7 +306,7 @@ def run_aria(llm: LLMBackend, problem: str, max_passes: int = 2, verbose: bool =
         solution = llm.generate(
             [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": solve_prompt}],
             temperature=0.7,
-            max_tokens=4096,
+            max_tokens=max_tokens,
         )
         all_attempts.append(solution)
 
@@ -391,7 +391,7 @@ def run_aria(llm: LLMBackend, problem: str, max_passes: int = 2, verbose: bool =
 # Baseline: Independent Passes (standard best-of-N)
 # ---------------------------------------------------------------------------
 
-def run_baseline(llm: LLMBackend, problem: str, num_passes: int = 2, verbose: bool = True) -> dict:
+def run_baseline(llm: LLMBackend, problem: str, num_passes: int = 2, verbose: bool = True, max_tokens: int = 4096) -> dict:
     """Run N independent attempts (no cache sharing) and pick majority answer."""
 
     answers = []
@@ -406,7 +406,7 @@ def run_baseline(llm: LLMBackend, problem: str, num_passes: int = 2, verbose: bo
         solution = llm.generate(
             [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": solve_prompt}],
             temperature=0.7,
-            max_tokens=4096,
+            max_tokens=max_tokens,
         )
         all_attempts.append(solution)
 
@@ -450,6 +450,7 @@ def main():
     parser.add_argument("--base-url", default=None, help="Base URL for OpenAI-compatible endpoints")
     parser.add_argument("--problems", default=None, help="Path to JSON file with problems (list of {id, problem, answer})")
     parser.add_argument("--max-passes", type=int, default=2, help="Number of passes for both ARIA and baseline")
+    parser.add_argument("--max-tokens", type=int, default=4096, help="Max generation tokens per call (increase for thinking models)")
     parser.add_argument("--verbose", action="store_true", default=True)
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--output", default=None, help="Path to save results JSON")
@@ -492,7 +493,7 @@ def main():
         # --- Run Baseline (independent passes) ---
         logger.info(f"[BASELINE] Running {args.max_passes} independent passes...")
         baseline_llm = LLMBackend(args.backend, args.model, args.api_key, args.base_url)
-        baseline_result = run_baseline(baseline_llm, problem_text, args.max_passes, args.verbose)
+        baseline_result = run_baseline(baseline_llm, problem_text, args.max_passes, args.verbose, args.max_tokens)
         baseline_correct = str(baseline_result["final_answer"]).strip() == correct
 
         logger.info(f"[BASELINE] Final: {baseline_result['final_answer']} | Correct: {baseline_correct}")
@@ -501,7 +502,7 @@ def main():
         # --- Run ARIA (informed passes with cache) ---
         logger.info(f"\n[ARIA] Running {args.max_passes} informed passes with reasoning cache...")
         aria_llm = LLMBackend(args.backend, args.model, args.api_key, args.base_url)
-        aria_result = run_aria(aria_llm, problem_text, args.max_passes, args.verbose)
+        aria_result = run_aria(aria_llm, problem_text, args.max_passes, args.verbose, args.max_tokens)
         aria_correct = str(aria_result["final_answer"]).strip() == correct
 
         logger.info(f"[ARIA] Final: {aria_result['final_answer']} | Correct: {aria_correct}")
