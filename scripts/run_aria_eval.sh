@@ -73,7 +73,7 @@ echo "vLLM PID: $VLLM_PID"
 
 # ─── Wait for vLLM to be ready ───
 echo "Waiting for vLLM to start (this takes ~10 minutes for Qwen3.5)..."
-MAX_WAIT=900  # 15 minutes
+MAX_WAIT=1800  # 30 minutes — Qwen3.5 needs ~15-20 min for compile+warmup
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
     if curl -s "http://localhost:${PORT}/health" > /dev/null 2>&1; then

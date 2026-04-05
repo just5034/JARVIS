@@ -44,6 +44,7 @@ def make_arg_parser(benchmark_name: str) -> argparse.ArgumentParser:
     )
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size for generation")
     parser.add_argument("--no-track", action="store_true", help="Disable Aim tracking")
+    parser.add_argument("--no-think", action="store_true", help="Disable Qwen3.5 thinking mode (saves tokens for code gen)")
     return parser
 
 
@@ -97,6 +98,7 @@ def generate_batch(
     temperature: float = 0.0,
     n: int = 1,
     adapter_path: str | None = None,
+    no_think: bool = False,
 ) -> list[list[str]]:
     """Generate completions for a batch of prompts.
 
@@ -121,7 +123,12 @@ def generate_batch(
     tokenizer = llm.get_tokenizer()
     formatted_prompts = []
     for prompt in prompts:
-        messages = [{"role": "user", "content": prompt}]
+        content = prompt
+        if no_think:
+            # Qwen3.5: prepend /no_think to disable thinking mode,
+            # saving token budget for actual output (useful for code gen)
+            content = "/no_think\n" + content
+        messages = [{"role": "user", "content": content}]
         formatted = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
         )

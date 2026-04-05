@@ -164,7 +164,8 @@ if $RUN_CODE; then
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
         --experiment "qwen35_baseline_livecode" \
-        --max-tokens 16384
+        --max-tokens 16384 \
+        --no-think
 
     python -c "
 import json

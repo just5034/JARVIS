@@ -400,6 +400,7 @@ def evaluate(args) -> dict:
             max_tokens=args.max_tokens,
             temperature=args.temperature,
             adapter_path=args.adapter,
+            no_think=getattr(args, "no_think", False),
         )
         all_responses.extend(responses)
         print(f"[livecode] generated {min(i + args.batch_size, len(prompts))}/{len(prompts)}")
@@ -433,6 +434,7 @@ def evaluate(args) -> dict:
                 "title": problem.get("title", ""),
                 "passed": False,
                 "reason": "no_code_extracted",
+                "difficulty": problem.get("difficulty", "unknown"),
                 "response_tail": full_text[-500:] if full_text else "",
             })
             continue
