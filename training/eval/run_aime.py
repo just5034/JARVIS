@@ -1,13 +1,15 @@
 """Evaluate model on AIME 2024 — competition math problems.
 
 Dataset: AIME 2024 I & II (30 problems total)
-Metric: Accuracy (% correct, answers are integers 000-999)
-Target: >= 87% for math brain (off-shelf + inference amplification)
+Metric: avg@N — average accuracy across N independent samples per problem
+         (MathArena protocol: N=4, temp=0.6)
+Target: >= 81% for Qwen3.5-27B
 
 Usage:
     python -m training.eval.run_aime \
-        --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
-        --output /scratch/bgde/jhill5/eval/aime_2024.json
+        --model /projects/bgde/jhill5/models/qwen3.5-27b \
+        --output /scratch/bgde/jhill5/eval/aime_2024.json \
+        --n-samples 4
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ AIME_PROMPT_TEMPLATE = """Solve the following AIME competition math problem. The
 
 Problem: {problem}
 
-Think step by step. Show your full work, then put your final answer in \\boxed{{}} format."""
+Please reason step by step, and put your final answer within \\boxed{{}}."""
 
 
 def load_aime_2024(data_dir: str) -> list[dict]:
@@ -41,23 +43,19 @@ def load_aime_2024(data_dir: str) -> list[dict]:
         with open(local_path) as f:
             return [json.loads(line) for line in f]
 
-    # Try HuggingFace
     print("[aime] local data not found, downloading from HuggingFace...")
     try:
         from datasets import load_dataset
-
         ds = load_dataset("Maxwell-Jia/AIME_2024", split="train")
     except Exception:
         try:
             ds = load_dataset("qq8933/AIME_2024", split="test")
         except Exception as e:
             print(f"ERROR: could not load AIME 2024 dataset: {e}", file=sys.stderr)
-            print("Run 'python -m training.data.download_benchmarks' first.", file=sys.stderr)
             sys.exit(1)
 
     problems = []
     for row in ds:
-        # Field names vary by dataset — try common ones
         problem_text = row.get("problem", row.get("Problem", row.get("question", "")))
         answer = str(row.get("answer", row.get("Answer", row.get("solution", ""))))
 
@@ -69,7 +67,6 @@ def load_aime_2024(data_dir: str) -> list[dict]:
                 "number": row.get("number", row.get("problem_number", len(problems) + 1)),
             })
 
-    # Cache locally
     local_path.parent.mkdir(parents=True, exist_ok=True)
     with open(local_path, "w") as f:
         for p in problems:
@@ -80,7 +77,7 @@ def load_aime_2024(data_dir: str) -> list[dict]:
 
 
 def normalize_answer(ans: str | None) -> str | None:
-    """Normalize AIME answer to 3-digit string (000-999)."""
+    """Normalize AIME answer to string (000-999)."""
     if ans is None:
         return None
     try:
@@ -93,15 +90,17 @@ def normalize_answer(ans: str | None) -> str | None:
 
 
 def evaluate(args) -> dict:
-    """Run AIME 2024 evaluation."""
+    """Run AIME 2024 evaluation with avg@N (MathArena protocol)."""
     problems = load_aime_2024(args.data_dir)
     print(f"[aime] loaded {len(problems)} problems")
+    print(f"[aime] sampling: n={args.n_samples}, temp={args.temperature}, "
+          f"top_p={args.top_p}, top_k={args.top_k}, max_tokens={args.max_tokens}")
 
     llm = load_model(args.model, args.adapter)
 
     prompts = [AIME_PROMPT_TEMPLATE.format(problem=p["problem"]) for p in problems]
 
-    # Generate
+    # Generate N samples per problem
     all_responses = []
     for i in range(0, len(prompts), args.batch_size):
         batch = prompts[i : i + args.batch_size]
@@ -110,46 +109,61 @@ def evaluate(args) -> dict:
             batch,
             max_tokens=args.max_tokens,
             temperature=args.temperature,
+            top_p=args.top_p,
+            top_k=args.top_k,
+            n=args.n_samples,
             adapter_path=args.adapter,
         )
         all_responses.extend(responses)
         print(f"[aime] generated {min(i + args.batch_size, len(prompts))}/{len(prompts)}")
 
-    # Score
-    correct = 0
+    # Score: avg@N — for each problem, check each sample independently,
+    # then average the per-problem pass rates
     details = []
+    per_problem_rates = []
 
     for problem, responses in zip(problems, all_responses):
-        full_text = responses[0]
-        # Try answer from post-thinking text first, fall back to full output
-        after_think = strip_thinking(full_text)
-        predicted = normalize_answer(extract_numeric(after_think))
-        if predicted is None:
-            predicted = normalize_answer(extract_numeric(full_text))
         expected = normalize_answer(problem["answer"])
-        is_correct = predicted == expected
+        sample_results = []
 
-        if is_correct:
-            correct += 1
+        for sample_text in responses:
+            after_think = strip_thinking(sample_text)
+            predicted = normalize_answer(extract_numeric(after_think))
+            if predicted is None:
+                predicted = normalize_answer(extract_numeric(sample_text))
+            sample_results.append({
+                "predicted": predicted,
+                "is_correct": predicted == expected,
+            })
+
+        n_correct = sum(1 for s in sample_results if s["is_correct"])
+        pass_rate = n_correct / len(sample_results) if sample_results else 0
+        per_problem_rates.append(pass_rate)
 
         detail = {
             "problem": problem["problem"][:200],
             "expected": expected,
-            "predicted": predicted,
-            "is_correct": is_correct,
+            "n_samples": len(sample_results),
+            "n_correct": n_correct,
+            "pass_rate": round(pass_rate, 4),
+            "predictions": [s["predicted"] for s in sample_results],
             "contest": problem.get("contest", ""),
             "number": problem.get("number", ""),
         }
-        # Store response tail for wrong answers to debug extraction
-        if not is_correct:
-            detail["response_tail"] = full_text[-500:] if full_text else ""
+        # Store response tail for problems where all samples failed
+        if n_correct == 0 and responses:
+            detail["response_tail"] = responses[0][-500:]
         details.append(detail)
 
-    accuracy = correct / len(problems) if problems else 0
+    avg_accuracy = sum(per_problem_rates) / len(per_problem_rates) if per_problem_rates else 0
+    # Also report "strict" accuracy (majority vote across N samples)
+    strict_correct = sum(1 for r in per_problem_rates if r > 0.5)
+
     metrics = {
-        "accuracy": round(accuracy, 4),
-        "n_correct": correct,
+        f"avg_at_{args.n_samples}": round(avg_accuracy, 4),
+        "strict_accuracy": round(strict_correct / len(problems), 4) if problems else 0,
         "n_total": len(problems),
+        "n_samples_per_problem": args.n_samples,
     }
 
     return {"metrics": metrics, "details": details}
@@ -158,6 +172,11 @@ def evaluate(args) -> dict:
 def main():
     parser = make_arg_parser("aime_2024")
     args = parser.parse_args()
+
+    # Default to N=4 for AIME (MathArena protocol)
+    if args.n_samples == 1 and "--n-samples" not in sys.argv:
+        args.n_samples = 4
+        print("[aime] using default n_samples=4 (MathArena avg@4 protocol)")
 
     results = evaluate(args)
 
@@ -181,10 +200,12 @@ def main():
     if tracker:
         tracker.close()
 
-    target = 0.87
-    acc = results["metrics"]["accuracy"]
-    status = "PASS" if acc >= target else "FAIL"
-    print(f"\n[aime] accuracy: {acc:.1%} (target: {target:.0%}) — {status}")
+    n = args.n_samples
+    avg = results["metrics"][f"avg_at_{n}"]
+    strict = results["metrics"]["strict_accuracy"]
+    target = 0.81
+    status = "PASS" if avg >= target * 0.90 else "BELOW TARGET"
+    print(f"\n[aime] avg@{n}: {avg:.1%} | strict: {strict:.1%} (target: {target:.0%}) — {status}")
 
 
 if __name__ == "__main__":

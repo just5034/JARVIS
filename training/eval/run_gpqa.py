@@ -27,7 +27,7 @@ from training.eval.base import (
 )
 
 
-GPQA_PROMPT_TEMPLATE = """Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering.
+GPQA_PROMPT_TEMPLATE = """Answer the following multiple choice question. The last line of your response should be of the following format: 'ANSWER: $LETTER' (without quotes) where LETTER is one of A,B,C,D.
 
 {question}
 
@@ -122,6 +122,8 @@ def evaluate(args) -> dict:
             batch,
             max_tokens=args.max_tokens,
             temperature=args.temperature,
+            top_p=args.top_p,
+            top_k=args.top_k,
             adapter_path=args.adapter,
         )
         all_responses.extend(responses)

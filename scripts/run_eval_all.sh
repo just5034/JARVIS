@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Run ALL benchmark evaluations on Delta with Qwen3.5-27B.
-# Evaluates single unified base model on physics, math, and code benchmarks.
 #
-# Budget: ~32 SU (4 GPUs × 8 hours)
+# Methodology matches published Qwen3.5 evaluation:
+# - Thinking mode ON (default)
+# - temperature=0.6, top_p=0.95, top_k=20
+# - GPQA: pass@1, 1 sample, max_tokens=32768
+# - AIME: avg@4, 4 samples per problem (MathArena protocol)
+# - LiveCodeBench: avg@8, 8 samples per problem
+#
+# Budget: ~128 SU (4 GPUs × 32 hours)
 #
 # Usage:
 #   sbatch scripts/run_eval_all.sh
-#   # Or run specific benchmarks:
 #   sbatch scripts/run_eval_all.sh --physics-only
 #   sbatch scripts/run_eval_all.sh --code-only
 
@@ -18,7 +23,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=120G
-#SBATCH --time=16:00:00
+#SBATCH --time=32:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
 #SBATCH --output=/scratch/bgde/jhill5/logs/eval-%j.out
@@ -43,7 +48,6 @@ export HF_HOME=/tmp/hf_cache
 export TMPDIR=/tmp
 
 # ─── Paths ───
-# Single unified base model — all benchmarks use the same model
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
 DATA="/scratch/bgde/jhill5/data/benchmarks"
 EVAL_OUT="/scratch/bgde/jhill5/eval"
@@ -87,27 +91,32 @@ echo "GPUs:   $(nvidia-smi -L | wc -l)"
 echo "Model:  $BASE_MODEL"
 echo "Date:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
+echo "Methodology: Qwen3.5 published eval protocol"
+echo "  Thinking mode: ON"
+echo "  Sampling: temp=0.6, top_p=0.95, top_k=20"
+echo "  GPQA:     pass@1, n=1,  max_tokens=32768"
+echo "  AIME:     avg@4,  n=4,  max_tokens=32768"
+echo "  LiveCode: avg@8,  n=8,  max_tokens=32768"
+echo ""
 echo "Published targets:"
-echo "  GPQA Diamond:  86%"
-echo "  AIME 2024:     81%"
+echo "  GPQA Diamond:   85.5%"
+echo "  AIME 2024:      81%"
 echo "  LiveCodeBench:  80.7%"
 echo ""
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-# ─── GPQA Diamond (Physics) ───
+# ─── GPQA Diamond (Physics) — pass@1 ───
 if $RUN_PHYSICS; then
-    echo "=== [1/4] GPQA Diamond — Physics ==="
-    echo "  Target: >= 86% (published Qwen3.5-27B)"
+    echo "=== [1/4] GPQA Diamond — pass@1 ==="
     python -m training.eval.run_gpqa \
         --model "$BASE_MODEL" \
         --output "$EVAL_OUT/gpqa_diamond_qwen35_${TIMESTAMP}.json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
         --experiment "qwen35_baseline_gpqa" \
-        --temperature 0.6
+        --n-samples 1
 
-    # Print result summary
     python -c "
 import json
 with open('$EVAL_OUT/gpqa_diamond_qwen35_${TIMESTAMP}.json') as f:
@@ -116,8 +125,8 @@ m = r.get('metrics', {})
 acc = m.get('accuracy', 0) * 100
 n = m.get('n_total', 0)
 print(f'  Result: {acc:.1f}% ({m.get(\"n_correct\", 0)}/{n})')
-target = 86.0
-if acc >= target * 0.95:  # within 5% of target
+target = 85.5
+if acc >= target * 0.95:
     print(f'  STATUS: PASS (>= {target*0.95:.1f}% threshold)')
 else:
     print(f'  STATUS: BELOW TARGET (expected >= {target*0.95:.1f}%)')
@@ -125,28 +134,27 @@ else:
     echo ""
 fi
 
-# ─── AIME 2024 (Math) ───
+# ─── AIME 2024 (Math) — avg@4 ───
 if $RUN_MATH; then
-    echo "=== [2/4] AIME 2024 — Math ==="
-    echo "  Target: >= 81% (published Qwen3.5-27B)"
+    echo "=== [2/4] AIME 2024 — avg@4 (MathArena protocol) ==="
     python -m training.eval.run_aime \
         --model "$BASE_MODEL" \
         --output "$EVAL_OUT/aime_2024_qwen35_${TIMESTAMP}.json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
         --experiment "qwen35_baseline_aime" \
-        --temperature 0.0
+        --n-samples 4
 
     python -c "
 import json
 with open('$EVAL_OUT/aime_2024_qwen35_${TIMESTAMP}.json') as f:
     r = json.load(f)
 m = r.get('metrics', {})
-acc = m.get('accuracy', 0) * 100
-n = m.get('n_total', 0)
-print(f'  Result: {acc:.1f}% ({m.get(\"n_correct\", 0)}/{n})')
+avg = m.get('avg_at_4', 0) * 100
+strict = m.get('strict_accuracy', 0) * 100
+print(f'  Result: avg@4={avg:.1f}% strict={strict:.1f}%')
 target = 81.0
-if acc >= target * 0.90:
+if avg >= target * 0.90:
     print(f'  STATUS: PASS (>= {target*0.90:.1f}% threshold)')
 else:
     print(f'  STATUS: BELOW TARGET (expected >= {target*0.90:.1f}%)')
@@ -154,29 +162,27 @@ else:
     echo ""
 fi
 
-# ─── LiveCodeBench (Code) ───
+# ─── LiveCodeBench (Code) — avg@8 ───
 if $RUN_CODE; then
-    echo "=== [3/4] LiveCodeBench — Code ==="
-    echo "  Target: >= 80.7% (published Qwen3.5-27B)"
+    echo "=== [3/4] LiveCodeBench — avg@8 ==="
     python -m training.eval.run_livecode \
         --model "$BASE_MODEL" \
         --output "$EVAL_OUT/livecode_qwen35_${TIMESTAMP}.json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
         --experiment "qwen35_baseline_livecode" \
-        --max-tokens 16384 \
-        --no-think
+        --n-samples 8
 
     python -c "
 import json
 with open('$EVAL_OUT/livecode_qwen35_${TIMESTAMP}.json') as f:
     r = json.load(f)
 m = r.get('metrics', {})
-acc = m.get('pass_at_1', m.get('accuracy', 0)) * 100
-n = m.get('n_total', 0)
-print(f'  Result: {acc:.1f}% pass@1 ({n} problems)')
+avg = m.get('avg_at_8', 0) * 100
+p1 = m.get('pass_at_1', 0) * 100
+print(f'  Result: avg@8={avg:.1f}% pass@1={p1:.1f}%')
 target = 80.7
-if acc >= target * 0.90:
+if avg >= target * 0.90:
     print(f'  STATUS: PASS (>= {target*0.90:.1f}% threshold)')
 else:
     print(f'  STATUS: BELOW TARGET (expected >= {target*0.90:.1f}%)')
