@@ -4,7 +4,14 @@
 # Starts a vLLM OpenAI-compatible server, waits for it to be healthy,
 # then runs ARIA prototype against it.
 #
-# Budget: ~4 SU (4 GPUs × 1 hour)
+# Budget: ~16 SU (4 GPUs × 4 hours)
+#
+# v2 changes:
+# - Qwen3.5-aware: strip_thinking + extract_boxed_answer from eval base
+# - Differentiated token budgets: solve=32K, verify=4K
+# - Combined verify+extract into single LLM call
+# - Correct sampling: temp=0.6, top_p=0.95 (published defaults)
+# - Time limit increased: 6 problems × ~20min each × 2 methods = ~4hr
 #
 # Usage:
 #   sbatch scripts/run_aria_eval.sh
@@ -17,7 +24,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=120G
-#SBATCH --time=02:00:00
+#SBATCH --time=06:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
 #SBATCH --output=/scratch/bgde/jhill5/logs/aria-%j.out
@@ -97,14 +104,17 @@ fi
 
 # ─── Run ARIA ───
 echo ""
-echo "=== Running ARIA (3 passes, 16K tokens) ==="
+echo "=== Running ARIA v2 (3 passes, solve=32K, verify=4K) ==="
+echo "Sampling: temp=0.6, top_p=0.95 (Qwen3.5 published defaults)"
+echo ""
 python scripts/aria_prototype.py \
     --backend openai \
     --base-url "http://localhost:${PORT}/v1" \
     --model "$BASE_MODEL" \
     --api-key "not-needed" \
     --max-passes 3 \
-    --max-tokens 16384 \
+    --solve-max-tokens 32768 \
+    --verify-max-tokens 4096 \
     --output "$EVAL_OUT/aria_qwen35_${TIMESTAMP}.json"
 
 echo ""
