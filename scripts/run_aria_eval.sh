@@ -104,7 +104,7 @@ fi
 
 # ─── Run ARIA ───
 echo ""
-echo "=== Running ARIA v2 (3 passes, solve=32K, verify=4K) ==="
+echo "=== Running ARIA v2 (3 passes, solve=30K, verify=4K) ==="
 echo "Sampling: temp=0.6, top_p=0.95 (Qwen3.5 published defaults)"
 echo ""
 python scripts/aria_prototype.py \
@@ -113,7 +113,7 @@ python scripts/aria_prototype.py \
     --model "$BASE_MODEL" \
     --api-key "not-needed" \
     --max-passes 3 \
-    --solve-max-tokens 32768 \
+    --solve-max-tokens 30000 \
     --verify-max-tokens 4096 \
     --output "$EVAL_OUT/aria_qwen35_${TIMESTAMP}.json"
 

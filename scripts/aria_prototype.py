@@ -184,7 +184,7 @@ class LLMBackend:
         messages: list[dict],
         temperature: float = QWEN35_DEFAULTS["temperature"],
         top_p: float = QWEN35_DEFAULTS["top_p"],
-        max_tokens: int = 32768,
+        max_tokens: int = 30000,
     ) -> str:
         if self.backend == "anthropic":
             system = None
@@ -466,7 +466,7 @@ def run_aria(
     llm: LLMBackend,
     problem: str,
     max_passes: int = 2,
-    solve_max_tokens: int = 32768,
+    solve_max_tokens: int = 30000,
     verify_max_tokens: int = 4096,
     verbose: bool = True,
 ) -> dict:
@@ -558,7 +558,7 @@ def run_baseline(
     llm: LLMBackend,
     problem: str,
     num_passes: int = 2,
-    solve_max_tokens: int = 32768,
+    solve_max_tokens: int = 30000,
     verbose: bool = True,
 ) -> dict:
     """Run N independent attempts (no cache sharing) and pick majority answer."""
@@ -615,8 +615,8 @@ def main():
     parser.add_argument("--base-url", default=None, help="Base URL for OpenAI-compatible endpoints")
     parser.add_argument("--problems", default=None, help="Path to JSON file with problems")
     parser.add_argument("--max-passes", type=int, default=2, help="Number of passes")
-    parser.add_argument("--solve-max-tokens", type=int, default=32768,
-                        help="Max tokens for solve step (default: 32768, Qwen3.5 published)")
+    parser.add_argument("--solve-max-tokens", type=int, default=30000,
+                        help="Max tokens for solve step (default: 30000, leaves room for prompt)")
     parser.add_argument("--verify-max-tokens", type=int, default=4096,
                         help="Max tokens for verify step (default: 4096, lower = faster)")
     parser.add_argument("--verbose", action="store_true", default=True)
