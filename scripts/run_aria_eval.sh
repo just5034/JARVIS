@@ -6,12 +6,17 @@
 #
 # Budget: ~16 SU (4 GPUs × 4 hours)
 #
-# v2 changes:
+# v3 changes (over v2):
+# - ADVERSARIAL verifier: assumes answer is wrong, hunts for errors
+# - Skeptic prior: cache only stores facts when verdict == SOLID
+# - Retry passes are TOLD specific challenges from previous attempt
+# - Early exit on SOLID verdict (no point retrying confirmed answers)
+# - Final answer prefers SOLID verdict pass over majority vote
+#
+# v2 (kept):
 # - Qwen3.5-aware: strip_thinking + extract_boxed_answer from eval base
-# - Differentiated token budgets: solve=32K, verify=4K
-# - Combined verify+extract into single LLM call
+# - Differentiated token budgets: solve=30K, verify=4K
 # - Correct sampling: temp=0.6, top_p=0.95 (published defaults)
-# - Time limit increased: 6 problems × ~20min each × 2 methods = ~4hr
 #
 # Usage:
 #   sbatch scripts/run_aria_eval.sh
@@ -104,7 +109,7 @@ fi
 
 # ─── Run ARIA ───
 echo ""
-echo "=== Running ARIA v2 (3 passes, solve=30K, verify=4K) ==="
+echo "=== Running ARIA v3 ADVERSARIAL (max 3 passes, early-exit on SOLID) ==="
 echo "Sampling: temp=0.6, top_p=0.95 (Qwen3.5 published defaults)"
 echo ""
 python scripts/aria_prototype.py \

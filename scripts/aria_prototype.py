@@ -276,151 +276,222 @@ class CacheEntry:
 
 
 @dataclass
-class FailureEntry:
-    approach: str
+class Challenge:
+    """A specific concern raised by the adversarial verifier."""
+    concern: str
     reason: str
+    alternative_approach: str
     pass_number: int
 
 
 @dataclass
 class ReasoningCache:
+    """v3 cache: tracks challenges (skeptic-prior) and verified facts (only when adversary concedes)."""
     verified_facts: list[CacheEntry] = field(default_factory=list)
-    failures: list[FailureEntry] = field(default_factory=list)
+    challenges: list[Challenge] = field(default_factory=list)
     previous_answers: list[str] = field(default_factory=list)
+    verdicts: list[str] = field(default_factory=list)  # SUSPECT or SOLID per pass
 
-    def to_prompt_section(self) -> str:
-        if not self.verified_facts and not self.failures:
-            return ""
+    def format_challenges_section(self) -> str:
+        """Format challenges for injection into the retry solve prompt."""
+        if not self.challenges:
+            return "(no specific concerns raised, but the answer is still suspect)"
 
         parts = []
-
-        if self.verified_facts:
-            parts.append("## VERIFIED INTERMEDIATE RESULTS (treat as established facts)")
-            for i, entry in enumerate(self.verified_facts, 1):
-                parts.append(f"{i}. [{entry.confidence} confidence] {entry.sub_problem}: {entry.result}")
-                if entry.method:
-                    parts.append(f"   Method: {entry.method}")
-
-        if self.failures:
-            parts.append("\n## APPROACHES THAT FAILED (do not repeat these)")
-            for i, entry in enumerate(self.failures, 1):
-                parts.append(f"{i}. {entry.approach}")
-                parts.append(f"   Why it failed: {entry.reason}")
-
-        if self.previous_answers:
-            parts.append(f"\n## PREVIOUS ANSWERS ATTEMPTED: {', '.join(self.previous_answers)}")
-            parts.append("If your work leads to one of these same answers, carefully re-verify before committing.")
-
+        for i, c in enumerate(self.challenges, 1):
+            parts.append(f"{i}. {c.concern}")
+            if c.reason:
+                parts.append(f"   Reason: {c.reason}")
+            if c.alternative_approach and c.alternative_approach.lower() not in ("none", "none if confident"):
+                parts.append(f"   Suggested alternative: {c.alternative_approach}")
         return "\n".join(parts)
 
+    def previous_answers_str(self) -> str:
+        if not self.previous_answers:
+            return "(none)"
+        return ", ".join(self.previous_answers)
+
 
 # ---------------------------------------------------------------------------
-# Prompts — designed for Qwen3.5 thinking mode
+# Prompts — v3: ADVERSARIAL VERIFICATION
 #
-# Key design decisions:
-# - SOLVE uses the same prompt format as run_aime.py (proven to work)
-# - VERIFY+EXTRACT are combined into one call (fewer tokens, less parsing)
-# - Structured output is requested AFTER </think> using explicit instruction
-# - Token budgets are differentiated: solve=32K, verify=4K
+# v2 negative result: same-model self-verification has confirmation bias.
+# When the solver is wrong, the verifier (same model) "verifies" the wrong
+# answer, populating the cache with bad scaffolding for subsequent passes.
+#
+# v3 design: assume the answer is WRONG until proven otherwise.
+# - Verifier is told the answer is suspected incorrect
+# - Verifier must produce a SPECIFIC challenge (concrete error or alternative)
+# - Cache only stores facts when adversary explicitly concedes "no errors found"
+# - Subsequent solve passes are told "the previous answer X was CHALLENGED
+#   on these grounds: [...]. Try a different approach."
 # ---------------------------------------------------------------------------
 
-# Matches AIME prompt from run_aime.py
-SOLVE_PROMPT = """Solve the following competition math problem. The answer is an integer.
+# Solve prompt — v3 takes an explicit "previous attempt" section instead of
+# trusting cached "verified facts" (which were the v2 confirmation-bias trap).
+SOLVE_PROMPT_INITIAL = """Solve the following competition math problem. The answer is an integer.
 
-{cache_section}Problem: {problem}
+Problem: {problem}
 
 Please reason step by step, and put your final answer within \\boxed{{}}."""
 
 
-# Combined verify + extract in one call.
-# Asks model to think about verification, then output structured results
-# after </think>. Lower token budget since we only need the structured part.
-VERIFY_AND_EXTRACT_PROMPT = """You are verifying a mathematical solution. Analyze each step of the reasoning for correctness.
+SOLVE_PROMPT_RETRY = """Solve the following competition math problem. The answer is an integer.
+
+## PREVIOUS ATTEMPT WAS CHALLENGED
+Previous answer(s) attempted: {previous_answers}
+
+A skeptical reviewer found the following specific concerns:
+{challenges}
+
+You should treat the previous answer(s) as SUSPECT. The reviewer's challenges may or may not be correct, but the consistent failure suggests a systematic error. Try a fundamentally different approach:
+- Re-read the problem carefully — are you interpreting it correctly?
+- Use a different solution method (if you used algebra, try cases; if you used cases, try a closed form)
+- Check edge cases and boundary conditions
+- Verify any assumptions you're making
 
 Problem: {problem}
 
-Proposed solution (answer was {answer}):
+Please reason step by step, and put your final answer within \\boxed{{}}."""
+
+
+# ADVERSARIAL verification — the key v3 change.
+# Frames the verifier as a hostile reviewer who assumes the answer is wrong.
+# This breaks the confirmation bias loop where solver and verifier agree
+# because they share the same blind spots.
+ADVERSARIAL_VERIFY_PROMPT = """You are a SKEPTICAL REVIEWER. Your job is to find errors in this solution. The proposed answer is suspected to be INCORRECT — your task is to find the specific mistake.
+
+Problem: {problem}
+
+Proposed answer: {answer}
+
+Solution to critique:
 {solution_stripped}
+
+Instructions for your review:
+1. Re-read the problem statement carefully. Is the solution interpreting it correctly? Common errors: misreading what's asked, ignoring constraints, off-by-one indexing.
+2. For each major step, ask "could this be wrong?" — find at least one plausible error.
+3. Try to construct a counterexample or alternative answer.
+4. Only conclude the answer is correct if you've genuinely tried and failed to find any error.
 
 After your analysis, output your findings in EXACTLY this format (after your thinking):
 
-VERIFIED:
-- [description of verified intermediate result] = [value] | [method used]
+CHALLENGES:
+- [specific concern about a step or assumption] | [why it might be wrong]
 
-ERRORS:
-- [description of error] | [why it's wrong]
+ALTERNATIVE_APPROACH: [a different method that might give a different answer, or "none if confident"]
 
-CONFIDENCE: [HIGH if answer is likely correct, LOW if errors found]
+VERDICT: [SUSPECT if you found plausible errors, SOLID if you genuinely could not find any error after trying]
 
-If there are no verified results, write "VERIFIED: none".
-If there are no errors, write "ERRORS: none"."""
+VERIFIED_FACTS: [intermediate results you actually checked and confirmed correct, in format "fact = value | method"; or "none" if VERDICT is SUSPECT]"""
 
 
 # ---------------------------------------------------------------------------
 # Cache extraction — parse the structured output from verify step
 # ---------------------------------------------------------------------------
 
-def parse_verification(raw_output: str, pass_number: int) -> tuple[list[CacheEntry], list[FailureEntry], str]:
-    """Parse the verify+extract output into cache entries.
+def parse_adversarial_verification(
+    raw_output: str, pass_number: int
+) -> tuple[list[Challenge], list[CacheEntry], str, str]:
+    """Parse adversarial verifier output.
 
-    Searches both post-</think> text and full output for the structured format.
-    Returns (facts, failures, confidence).
+    Returns (challenges, verified_facts, alternative_approach, verdict).
+
+    verdict is 'SUSPECT', 'SOLID', or 'unknown'.
+    Searches post-</think> first, falls back to full text.
     """
-    # Try post-thinking first, then full text
+    # Use post-thinking text if it contains the markers, else search full output
     text = strip_thinking(raw_output)
-    if "VERIFIED:" not in text and "VERIFIED:" in raw_output:
+    if "CHALLENGES:" not in text and "CHALLENGES:" in raw_output:
+        text = raw_output
+    if "VERDICT:" not in text and "VERDICT:" in raw_output:
         text = raw_output
 
+    challenges = []
     facts = []
-    failures = []
-    confidence = "unknown"
+    alternative = ""
+    verdict = "unknown"
 
-    in_verified = False
-    in_errors = False
+    in_challenges = False
+    in_verified_facts = False
 
-    for line in text.split("\n"):
-        line = line.strip()
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
 
-        if line.startswith("VERIFIED:"):
-            remainder = line[len("VERIFIED:"):].strip()
-            if remainder.lower() == "none":
-                in_verified = False
-            else:
-                in_verified = True
-                in_errors = False
-                # Check if there's content on the same line
-                if remainder and remainder.lower() != "none":
-                    _parse_fact_line(remainder, facts, pass_number)
+        if line.startswith("CHALLENGES:"):
+            in_challenges = True
+            in_verified_facts = False
+            remainder = line[len("CHALLENGES:"):].strip()
+            if remainder and remainder.lower() != "none":
+                _parse_challenge_line(remainder, challenges, alternative, pass_number)
+            i += 1
             continue
 
-        if line.startswith("ERRORS:"):
-            remainder = line[len("ERRORS:"):].strip()
-            if remainder.lower() == "none":
-                in_errors = False
-            else:
-                in_errors = True
-                in_verified = False
-                if remainder and remainder.lower() != "none":
-                    _parse_failure_line(remainder, failures, pass_number)
+        if line.startswith("ALTERNATIVE_APPROACH:"):
+            in_challenges = False
+            in_verified_facts = False
+            alternative = line[len("ALTERNATIVE_APPROACH:"):].strip()
+            i += 1
             continue
 
-        if line.startswith("CONFIDENCE:"):
-            confidence = line[len("CONFIDENCE:"):].strip().lower()
-            in_verified = False
-            in_errors = False
+        if line.startswith("VERDICT:"):
+            in_challenges = False
+            in_verified_facts = False
+            v = line[len("VERDICT:"):].strip().upper()
+            if "SUSPECT" in v:
+                verdict = "SUSPECT"
+            elif "SOLID" in v:
+                verdict = "SOLID"
+            i += 1
             continue
 
-        if in_verified and line.startswith("- "):
+        if line.startswith("VERIFIED_FACTS:"):
+            in_challenges = False
+            in_verified_facts = True
+            remainder = line[len("VERIFIED_FACTS:"):].strip()
+            if remainder and remainder.lower() != "none":
+                _parse_fact_line(remainder, facts, pass_number)
+            i += 1
+            continue
+
+        if in_challenges and line.startswith("- "):
+            _parse_challenge_line(line[2:], challenges, alternative, pass_number)
+        elif in_verified_facts and line.startswith("- "):
             _parse_fact_line(line[2:], facts, pass_number)
-        elif in_errors and line.startswith("- "):
-            _parse_failure_line(line[2:], failures, pass_number)
 
-    return facts, failures, confidence
+        i += 1
+
+    # Skeptic prior: only trust verified_facts if verdict is SOLID
+    if verdict != "SOLID":
+        facts = []
+
+    # Attach alternative approach to challenges (it's the adversary's main suggestion)
+    if alternative and challenges:
+        for c in challenges:
+            if not c.alternative_approach:
+                c.alternative_approach = alternative
+
+    return challenges, facts, alternative, verdict
+
+
+def _parse_challenge_line(line: str, challenges: list[Challenge], alternative: str, pass_number: int):
+    """Parse a CHALLENGE line: '[concern] | [reason]'."""
+    parts = line.split("|")
+    concern = parts[0].strip().strip("- ")
+    reason = parts[1].strip() if len(parts) > 1 else ""
+    if concern:
+        challenges.append(Challenge(
+            concern=concern,
+            reason=reason,
+            alternative_approach=alternative,
+            pass_number=pass_number,
+        ))
 
 
 def _parse_fact_line(line: str, facts: list[CacheEntry], pass_number: int):
-    """Parse a single VERIFIED fact line."""
-    # Expected: "[description] = [value] | [method]"
+    """Parse a VERIFIED_FACTS line: '[description] = [value] | [method]'."""
     parts = line.split("|")
     fact_text = parts[0].strip()
     method = parts[1].strip() if len(parts) > 1 else ""
@@ -444,20 +515,6 @@ def _parse_fact_line(line: str, facts: list[CacheEntry], pass_number: int):
         ))
 
 
-def _parse_failure_line(line: str, failures: list[FailureEntry], pass_number: int):
-    """Parse a single ERRORS failure line."""
-    # Expected: "[description] | [reason]"
-    parts = line.split("|")
-    approach = parts[0].strip().strip("- ")
-    reason = parts[1].strip() if len(parts) > 1 else "error detected"
-    if approach:
-        failures.append(FailureEntry(
-            approach=approach,
-            reason=reason,
-            pass_number=pass_number,
-        ))
-
-
 # ---------------------------------------------------------------------------
 # ARIA: Multi-Pass Reasoning Engine
 # ---------------------------------------------------------------------------
@@ -470,15 +527,23 @@ def run_aria(
     verify_max_tokens: int = 4096,
     verbose: bool = True,
 ) -> dict:
-    """Run ARIA multi-pass reasoning on a single problem.
+    """Run ARIA v3 — adversarial multi-pass reasoning.
 
-    Token budget strategy:
-    - SOLVE: Full budget (32K) — model needs space for extended thinking
-    - VERIFY+EXTRACT: Reduced budget (4K) — structured output is short
+    Flow:
+    1. Solve (initial prompt)
+    2. Adversarial verify — verifier assumes answer is wrong, tries to break it
+    3. If verdict == SOLID: early exit (no point retrying a confirmed answer)
+    4. Else: solve again with the specific challenges injected, retry
+    5. Final answer is the LAST pass that produced SOLID, OR a vote if no pass was SOLID
+
+    Token budget:
+    - SOLVE: Full budget (~32K) — extended thinking
+    - VERIFY: Reduced budget (~4K) — structured output is short
     """
     cache = ReasoningCache()
-    all_attempts = []
+    all_attempts = []  # list of (answer, verdict) tuples
     all_raw_solutions = []
+    early_exit_pass = None
     start_time = time.time()
 
     for pass_num in range(1, max_passes + 1):
@@ -486,11 +551,14 @@ def run_aria(
             logger.info(f"  ARIA Pass {pass_num}/{max_passes}")
 
         # --- SOLVE ---
-        cache_section = cache.to_prompt_section()
-        if cache_section:
-            cache_section = f"{cache_section}\n\n"
-
-        solve_prompt = SOLVE_PROMPT.format(cache_section=cache_section, problem=problem)
+        if pass_num == 1 or not cache.challenges:
+            solve_prompt = SOLVE_PROMPT_INITIAL.format(problem=problem)
+        else:
+            solve_prompt = SOLVE_PROMPT_RETRY.format(
+                problem=problem,
+                previous_answers=cache.previous_answers_str(),
+                challenges=cache.format_challenges_section(),
+            )
 
         solution_raw = llm.generate(
             [{"role": "user", "content": solve_prompt}],
@@ -498,52 +566,93 @@ def run_aria(
         )
         all_raw_solutions.append(solution_raw)
 
-        # Extract answer using validated Qwen3.5 extraction pipeline
         answer = extract_answer_robust(solution_raw)
-        all_attempts.append(answer)
         if answer:
             cache.previous_answers.append(answer)
 
         if verbose:
             logger.info(f"    Pass {pass_num} answer: {answer}")
 
-        # --- VERIFY + EXTRACT (combined, lower token budget) ---
-        # Strip thinking for a shorter solution summary to verify
+        # --- ADVERSARIAL VERIFY ---
         solution_stripped = strip_thinking(solution_raw)
-        # If stripped is too short, use a tail of the full output
         if len(solution_stripped) < 100:
             solution_stripped = solution_raw[-3000:]
 
-        verify_prompt = VERIFY_AND_EXTRACT_PROMPT.format(
+        verify_prompt = ADVERSARIAL_VERIFY_PROMPT.format(
             problem=problem,
             answer=answer or "unknown",
-            solution_stripped=solution_stripped[:3000],  # Cap input length
+            solution_stripped=solution_stripped[:3000],
         )
 
         verify_raw = llm.generate(
             [{"role": "user", "content": verify_prompt}],
-            temperature=0.2,  # Low temp for verification — more deterministic
+            temperature=0.2,
             max_tokens=verify_max_tokens,
         )
 
-        # Parse structured output from verification
-        new_facts, new_failures, confidence = parse_verification(verify_raw, pass_num)
+        new_challenges, new_facts, alternative, verdict = parse_adversarial_verification(
+            verify_raw, pass_num,
+        )
+        cache.challenges.extend(new_challenges)
         cache.verified_facts.extend(new_facts)
-        cache.failures.extend(new_failures)
+        cache.verdicts.append(verdict)
+
+        all_attempts.append((answer, verdict))
 
         if verbose:
-            logger.info(f"    Cache: {len(cache.verified_facts)} facts, {len(cache.failures)} failures (confidence: {confidence})")
+            logger.info(
+                f"    Verdict: {verdict} | Challenges: {len(new_challenges)} | "
+                f"Verified facts: {len(new_facts)} (cumulative: {len(cache.verified_facts)})"
+            )
+
+        # --- EARLY EXIT on SOLID verdict ---
+        # If the adversarial verifier genuinely could not find an error,
+        # there's no point running more passes — the answer is as confident
+        # as same-model verification can make it.
+        if verdict == "SOLID":
+            if verbose:
+                logger.info(f"    Early exit: SOLID verdict at pass {pass_num}")
+            early_exit_pass = pass_num
+            break
 
     elapsed = time.time() - start_time
-    final_answer = all_attempts[-1] if all_attempts else None
+
+    # --- FINAL ANSWER SELECTION ---
+    # Priority:
+    # 1. If any pass got SOLID verdict, use the LAST SOLID answer
+    # 2. Otherwise, majority vote across all attempts (with last as tiebreaker)
+    solid_answers = [ans for ans, v in all_attempts if v == "SOLID" and ans is not None]
+    if solid_answers:
+        final_answer = solid_answers[-1]
+        selection_method = "solid_verdict"
+    else:
+        all_ans = [ans for ans, _ in all_attempts if ans is not None]
+        if all_ans:
+            from collections import Counter
+            counts = Counter(all_ans)
+            top = counts.most_common(1)[0]
+            # If there's a tie, use the last attempt
+            if top[1] > 1:
+                final_answer = top[0]
+                selection_method = "majority_vote"
+            else:
+                final_answer = all_ans[-1]
+                selection_method = "last_attempt_no_majority"
+        else:
+            final_answer = None
+            selection_method = "no_answer"
 
     return {
-        "method": "aria",
-        "passes": max_passes,
+        "method": "aria_v3_adversarial",
+        "passes_run": len(all_attempts),
+        "passes_max": max_passes,
+        "early_exit_pass": early_exit_pass,
         "final_answer": final_answer,
-        "all_answers": [a for a in all_attempts if a is not None],
+        "selection_method": selection_method,
+        "all_answers": [a for a, _ in all_attempts if a is not None],
+        "verdicts": cache.verdicts,
         "cache_facts": len(cache.verified_facts),
-        "cache_failures": len(cache.failures),
+        "cache_challenges": len(cache.challenges),
         "elapsed_seconds": elapsed,
         "total_input_tokens": llm.total_input_tokens,
         "total_output_tokens": llm.total_output_tokens,
@@ -607,7 +716,7 @@ def run_baseline(
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="ARIA v2 — Multi-Pass Reasoning (Qwen3.5-aware)")
+    parser = argparse.ArgumentParser(description="ARIA v3 — Adversarial Multi-Pass Reasoning (Qwen3.5-aware)")
     parser.add_argument("--backend", choices=["anthropic", "openai"], default="anthropic")
     parser.add_argument("--model", default=None,
                         help="Model name. Defaults: anthropic=claude-haiku-4-5-20251001, openai uses --base-url model")
@@ -670,8 +779,8 @@ def main():
         logger.info(f"[BASELINE] Final: {baseline_result['final_answer']} | Correct: {baseline_correct}")
         logger.info(f"[BASELINE] Tokens: {baseline_result['total_input_tokens']}in + {baseline_result['total_output_tokens']}out | Time: {baseline_result['elapsed_seconds']:.1f}s")
 
-        # --- ARIA ---
-        logger.info(f"\n[ARIA] Running {args.max_passes} informed passes with reasoning cache...")
+        # --- ARIA v3 (adversarial) ---
+        logger.info(f"\n[ARIA] Running adversarial multi-pass (max {args.max_passes} passes, early-exit on SOLID)...")
         aria_llm = LLMBackend(args.backend, args.model, args.api_key, args.base_url)
         aria_result = run_aria(
             aria_llm, problem_text, args.max_passes,
@@ -680,7 +789,9 @@ def main():
         aria_correct = str(aria_result["final_answer"]).strip() == correct
 
         logger.info(f"[ARIA] Final: {aria_result['final_answer']} | Correct: {aria_correct}")
-        logger.info(f"[ARIA] Cache: {aria_result['cache_facts']} facts, {aria_result['cache_failures']} failures")
+        logger.info(f"[ARIA] Selection: {aria_result['selection_method']} | Verdicts: {aria_result['verdicts']}")
+        logger.info(f"[ARIA] Passes run: {aria_result['passes_run']}/{aria_result['passes_max']} (early exit at: {aria_result['early_exit_pass']})")
+        logger.info(f"[ARIA] Cache: {aria_result['cache_facts']} verified facts, {aria_result['cache_challenges']} challenges")
         logger.info(f"[ARIA] Tokens: {aria_result['total_input_tokens']}in + {aria_result['total_output_tokens']}out | Time: {aria_result['elapsed_seconds']:.1f}s")
 
         results.append({
