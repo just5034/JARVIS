@@ -162,25 +162,28 @@ else:
     echo ""
 fi
 
-# ─── LiveCodeBench (Code) — avg@8 ───
+# ─── LiveCodeBench (Code) — avg@4 ───
+# NOTE: Published Qwen3.5 uses avg@8, but at observed throughput (~6h for
+# 112/880 problems with n=8), full avg@8 would take ~47h. Using n=4 gives
+# meaningful averaging in ~24h. Variance vs avg@8 is small for stable models.
 if $RUN_CODE; then
-    echo "=== [3/4] LiveCodeBench — avg@8 ==="
+    echo "=== [3/4] LiveCodeBench — avg@4 ==="
     python -m training.eval.run_livecode \
         --model "$BASE_MODEL" \
         --output "$EVAL_OUT/livecode_qwen35_${TIMESTAMP}.json" \
         --data-dir "$DATA" \
         --log-dir "$TB_LOGS" \
         --experiment "qwen35_baseline_livecode" \
-        --n-samples 8
+        --n-samples 4
 
     python -c "
 import json
 with open('$EVAL_OUT/livecode_qwen35_${TIMESTAMP}.json') as f:
     r = json.load(f)
 m = r.get('metrics', {})
-avg = m.get('avg_at_8', 0) * 100
+avg = m.get('avg_at_4', 0) * 100
 p1 = m.get('pass_at_1', 0) * 100
-print(f'  Result: avg@8={avg:.1f}% pass@1={p1:.1f}%')
+print(f'  Result: avg@4={avg:.1f}% pass@1={p1:.1f}%')
 target = 80.7
 if avg >= target * 0.90:
     print(f'  STATUS: PASS (>= {target*0.90:.1f}% threshold)')
