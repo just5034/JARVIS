@@ -678,7 +678,7 @@ def run_baseline(
         if verbose:
             logger.info(f"  Baseline Pass {pass_num}/{num_passes}")
 
-        solve_prompt = SOLVE_PROMPT.format(cache_section="", problem=problem)
+        solve_prompt = SOLVE_PROMPT_INITIAL.format(problem=problem)
         solution_raw = llm.generate(
             [{"role": "user", "content": solve_prompt}],
             max_tokens=solve_max_tokens,
