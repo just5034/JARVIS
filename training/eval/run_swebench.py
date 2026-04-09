@@ -66,49 +66,74 @@ def load_swebench_verified(n_instances: int | None = None) -> list[dict]:
 
 
 def setup_repo(instance: dict, workdir: Path) -> Path | None:
-    """Clone instance repo at base_commit. Returns path or None on failure.
+    """Set up repo at base_commit. Returns path or None on failure.
 
-    Cached: if workdir/<instance_id>/.git already exists, just resets to base_commit.
+    Disk-efficient: caches one clone per UNIQUE repo (not per instance).
+    SWE-bench Verified has ~12 unique repos across 500 instances, so this
+    bounds disk use to ~5-10 GB instead of ~50+ GB.
+
+    For each instance: fetch the base_commit if not local, then
+    `git reset --hard <commit> && git clean -fdx` to start fresh.
     """
-    instance_id = instance["instance_id"]
     repo = instance["repo"]  # e.g., "django/django"
     base_commit = instance["base_commit"]
 
-    repo_dir = workdir / instance_id
+    # Cache by repo, not instance — use safe directory name
+    repo_safe = repo.replace("/", "__")
+    repo_dir = workdir / repo_safe
 
-    if (repo_dir / ".git").exists():
-        # Reset existing checkout
+    # Fresh clone if not cached
+    if not (repo_dir / ".git").exists():
+        repo_dir.parent.mkdir(parents=True, exist_ok=True)
+        clone_url = f"https://github.com/{repo}.git"
+        logger.info(f"  cloning {clone_url} (one-time, cached)...")
         try:
-            subprocess.run(["git", "reset", "--hard", base_commit],
-                           cwd=str(repo_dir), capture_output=True, check=True, timeout=60)
-            subprocess.run(["git", "clean", "-fdx"],
-                           cwd=str(repo_dir), capture_output=True, check=True, timeout=60)
-            logger.info(f"  reset existing checkout to {base_commit[:8]}")
-            return repo_dir
+            subprocess.run(
+                ["git", "clone", "--quiet", clone_url, str(repo_dir)],
+                check=True, capture_output=True, timeout=600,
+            )
         except subprocess.CalledProcessError as e:
-            logger.warning(f"  reset failed, re-cloning: {e}")
-            shutil.rmtree(repo_dir, ignore_errors=True)
+            logger.error(f"  clone failed: {e.stderr.decode() if e.stderr else e}")
+            return None
+        except subprocess.TimeoutExpired:
+            logger.error(f"  clone timed out")
+            return None
 
-    # Fresh clone
-    repo_dir.parent.mkdir(parents=True, exist_ok=True)
-    clone_url = f"https://github.com/{repo}.git"
-    logger.info(f"  cloning {clone_url}...")
+    # Make sure the base_commit exists locally — fetch if missing
+    rev_check = subprocess.run(
+        ["git", "cat-file", "-e", base_commit],
+        cwd=str(repo_dir), capture_output=True,
+    )
+    if rev_check.returncode != 0:
+        logger.info(f"  fetching base_commit {base_commit[:8]}...")
+        try:
+            subprocess.run(
+                ["git", "fetch", "--quiet", "origin", base_commit],
+                cwd=str(repo_dir), check=True, capture_output=True, timeout=300,
+            )
+        except subprocess.CalledProcessError:
+            # Some hosts don't allow fetching arbitrary SHAs; fall back to fetch-all
+            logger.info(f"  direct fetch failed, fetching all branches...")
+            try:
+                subprocess.run(
+                    ["git", "fetch", "--quiet", "--all"],
+                    cwd=str(repo_dir), check=True, capture_output=True, timeout=600,
+                )
+            except subprocess.CalledProcessError as e:
+                logger.error(f"  fetch failed: {e.stderr.decode() if e.stderr else e}")
+                return None
+
+    # Reset to base_commit and clean any leftovers from previous instance
     try:
-        subprocess.run(
-            ["git", "clone", "--quiet", clone_url, str(repo_dir)],
-            check=True, capture_output=True, timeout=300,
-        )
-        subprocess.run(
-            ["git", "checkout", base_commit],
-            cwd=str(repo_dir), check=True, capture_output=True, timeout=60,
-        )
+        subprocess.run(["git", "reset", "--hard", base_commit],
+                       cwd=str(repo_dir), capture_output=True, check=True, timeout=60)
+        subprocess.run(["git", "clean", "-fdx"],
+                       cwd=str(repo_dir), capture_output=True, check=True, timeout=60)
     except subprocess.CalledProcessError as e:
-        logger.error(f"  clone/checkout failed: {e.stderr.decode() if e.stderr else e}")
-        return None
-    except subprocess.TimeoutExpired:
-        logger.error(f"  clone/checkout timed out")
+        logger.error(f"  reset failed: {e.stderr.decode() if e.stderr else e}")
         return None
 
+    logger.info(f"  reset {repo} to {base_commit[:8]}")
     return repo_dir
 
 
@@ -144,6 +169,16 @@ def main():
     workdir.mkdir(parents=True, exist_ok=True)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Disk check — Delta scratch is shared 500GB
+    try:
+        usage = shutil.disk_usage(workdir)
+        free_gb = usage.free / (1024**3)
+        logger.info(f"Disk free at {workdir}: {free_gb:.1f} GB")
+        if free_gb < 20:
+            logger.warning(f"LOW DISK ({free_gb:.1f} GB free) — repo cloning may fail")
+    except Exception:
+        pass
 
     client = OpenAI(api_key=args.api_key, base_url=args.base_url)
     agent = SWEBenchAgent(
