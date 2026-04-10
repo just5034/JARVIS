@@ -564,7 +564,7 @@ def run_aria(
     problem: str,
     max_passes: int = 2,
     solve_max_tokens: int = 30000,
-    verify_max_tokens: int = 4096,
+    verify_max_tokens: int = 8192,
     verbose: bool = True,
 ) -> dict:
     """Run ARIA v3 — adversarial multi-pass reasoning.
@@ -577,8 +577,8 @@ def run_aria(
     5. Final answer is the LAST pass that produced SOLID, OR a vote if no pass was SOLID
 
     Token budget:
-    - SOLVE: Full budget (~32K) — extended thinking
-    - VERIFY: Reduced budget (~4K) — structured output is short
+    - SOLVE: Full budget (~30K) — extended thinking
+    - VERIFY: 8K — Qwen3.5 needs ~3-5K for thinking before structured output
     """
     cache = ReasoningCache()
     all_attempts = []  # list of (answer, verdict) tuples
@@ -766,8 +766,8 @@ def main():
     parser.add_argument("--max-passes", type=int, default=2, help="Number of passes")
     parser.add_argument("--solve-max-tokens", type=int, default=30000,
                         help="Max tokens for solve step (default: 30000, leaves room for prompt)")
-    parser.add_argument("--verify-max-tokens", type=int, default=4096,
-                        help="Max tokens for verify step (default: 4096, lower = faster)")
+    parser.add_argument("--verify-max-tokens", type=int, default=8192,
+                        help="Max tokens for verify step (default: 8192, Qwen3.5 needs ~5K thinking + structured output)")
     parser.add_argument("--verbose", action="store_true", default=True)
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--output", default=None, help="Path to save results JSON")

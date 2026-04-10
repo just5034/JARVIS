@@ -111,6 +111,7 @@ fi
 echo ""
 echo "=== Running ARIA v3 ADVERSARIAL (max 3 passes, early-exit on SOLID) ==="
 echo "Sampling: temp=0.6, top_p=0.95 (Qwen3.5 published defaults)"
+echo "Token budgets: solve=30K, verify=8K (Qwen3.5 needs ~5K thinking before structured output)"
 echo ""
 python scripts/aria_prototype.py \
     --backend openai \
@@ -119,7 +120,7 @@ python scripts/aria_prototype.py \
     --api-key "not-needed" \
     --max-passes 3 \
     --solve-max-tokens 30000 \
-    --verify-max-tokens 4096 \
+    --verify-max-tokens 8192 \
     --output "$EVAL_OUT/aria_qwen35_${TIMESTAMP}.json"
 
 echo ""
