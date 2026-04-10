@@ -36,8 +36,8 @@ if [ ! -d "$VENV" ]; then
 fi
 source "$VENV/bin/activate"
 
-# Ensure the tooluse package from this branch is installed
-pip install -e "/u/$USER/JARVIS" --quiet 2>&1 | tail -3
+# Ensure the tooluse package from this branch is installed, plus pytest for smoke tests
+pip install -e "/u/$USER/JARVIS" pytest httpx --quiet 2>&1 | tail -3
 
 mkdir -p /scratch/bgde/jhill5/logs
 
