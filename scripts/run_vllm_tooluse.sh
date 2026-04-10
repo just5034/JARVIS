@@ -69,15 +69,15 @@ PARSER_OPTS=$(python -m vllm.entrypoints.openai.api_server --help 2>&1 | \
 echo "Available parsers (raw):"
 echo "$PARSER_OPTS" | head -5
 TOOL_PARSER=""
-for candidate in hermes qwen3 qwen; do
+for candidate in qwen3_xml qwen3_coder hermes; do
     if echo "$PARSER_OPTS" | grep -qw "$candidate"; then
         TOOL_PARSER="$candidate"
         break
     fi
 done
 if [ -z "$TOOL_PARSER" ]; then
-    echo "WARNING: could not auto-detect tool parser; defaulting to 'hermes'"
-    TOOL_PARSER="hermes"
+    echo "WARNING: could not auto-detect tool parser; defaulting to 'qwen3_xml'"
+    TOOL_PARSER="qwen3_xml"
 fi
 echo "Using --tool-call-parser=$TOOL_PARSER"
 echo
