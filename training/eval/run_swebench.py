@@ -58,9 +58,41 @@ def load_swebench_verified(n_instances: int | None = None) -> list[dict]:
     instances = list(ds)
     logger.info(f"Loaded {len(instances)} instances")
 
-    if n_instances:
-        instances = instances[:n_instances]
-        logger.info(f"Subsampled to first {n_instances} instances")
+    if n_instances and n_instances < len(instances):
+        # Sample evenly across repos instead of taking the first N
+        # (first N are often all from the same repo, e.g., astropy)
+        from collections import defaultdict
+        import random
+        random.seed(42)
+
+        by_repo = defaultdict(list)
+        for inst in instances:
+            by_repo[inst["repo"]].append(inst)
+
+        repos = sorted(by_repo.keys())
+        sampled = []
+        per_repo = max(1, n_instances // len(repos))
+        remainder = n_instances - per_repo * len(repos)
+
+        for repo in repos:
+            pool = by_repo[repo]
+            random.shuffle(pool)
+            take = min(per_repo, len(pool))
+            sampled.extend(pool[:take])
+
+        # Fill remainder from largest repos
+        if len(sampled) < n_instances:
+            remaining = [inst for inst in instances if inst not in sampled]
+            random.shuffle(remaining)
+            sampled.extend(remaining[:n_instances - len(sampled)])
+
+        sampled = sampled[:n_instances]
+        repo_counts = defaultdict(int)
+        for s in sampled:
+            repo_counts[s["repo"]] += 1
+        logger.info(f"Sampled {len(sampled)} instances across {len(repo_counts)} repos: "
+                     + ", ".join(f"{r.split('/')[-1]}={c}" for r, c in sorted(repo_counts.items())))
+        return sampled
 
     return instances
 
