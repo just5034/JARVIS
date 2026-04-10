@@ -46,6 +46,19 @@ export HF_HOME=/tmp/hf_cache
 export TMPDIR=/tmp
 export PYTHONUNBUFFERED=1
 
+# ─── GPU sanity check: fail fast if GPUs are unavailable ───
+echo "=== GPU Check ==="
+echo "Node: $(hostname)"
+GPU_COUNT=$(nvidia-smi -L 2>/dev/null | wc -l)
+echo "GPUs visible: $GPU_COUNT"
+if [ "$GPU_COUNT" -lt 4 ]; then
+    echo "ERROR: Expected 4 GPUs, found $GPU_COUNT. Node may be dirty."
+    nvidia-smi 2>&1 || true
+    exit 1
+fi
+nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv,noheader
+echo
+
 # ─── Paths and ports (distinct from compat job) ───
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
 VLLM_PORT=8290
@@ -90,7 +103,9 @@ python -m vllm.entrypoints.openai.api_server \
     --host 0.0.0.0 \
     --port $VLLM_PORT \
     --tensor-parallel-size 4 \
+    --dtype bfloat16 \
     --max-model-len 32768 \
+    --gpu-memory-utilization 0.90 \
     --enable-auto-tool-choice \
     --tool-call-parser "$TOOL_PARSER" \
     > "$VLLM_LOG" 2>&1 &
