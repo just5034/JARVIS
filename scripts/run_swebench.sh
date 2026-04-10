@@ -90,8 +90,13 @@ echo "Workdir:   $WORKDIR"
 echo "Date:      $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ""
 
-# ─── Start vLLM server ───
-echo "Starting vLLM OpenAI-compatible server on port $PORT..."
+# ─── Start vLLM server WITH tool calling support ───
+# Critical flags for Qwen3.5 tool calling:
+#   --enable-auto-tool-choice  : allows tools= param in API calls
+#   --tool-call-parser qwen3_coder : parses <tool_call> tags from Qwen3.5 output
+#   --reasoning-parser qwen3 : strips <think>...</think> before parsing tool calls
+# Without these, the tools param is silently ignored and the model outputs plain text.
+echo "Starting vLLM server with tool calling on port $PORT..."
 python -m vllm.entrypoints.openai.api_server \
     --model "$BASE_MODEL" \
     --trust-remote-code \
@@ -99,6 +104,9 @@ python -m vllm.entrypoints.openai.api_server \
     --max-model-len 32768 \
     --port $PORT \
     --disable-log-stats \
+    --enable-auto-tool-choice \
+    --tool-call-parser qwen3_coder \
+    --reasoning-parser qwen3 \
     > /scratch/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log 2>&1 &
 
 VLLM_PID=$!
@@ -125,6 +133,42 @@ if [ $WAITED -ge $MAX_WAIT ]; then
     echo "ERROR: vLLM did not start within ${MAX_WAIT}s"
     kill $VLLM_PID 2>/dev/null || true
     exit 1
+fi
+
+# ─── Verify tool calling works before running full eval ───
+echo "Probing tool calling support..."
+PROBE_RESULT=$(python -c "
+from openai import OpenAI
+c = OpenAI(api_key='x', base_url='http://localhost:${PORT}/v1')
+try:
+    r = c.chat.completions.create(
+        model='$BASE_MODEL',
+        messages=[{'role':'user','content':'What is 2+2? Use the calculator tool.'}],
+        tools=[{'type':'function','function':{'name':'calc','description':'calculator','parameters':{'type':'object','properties':{'expr':{'type':'string'}},'required':['expr']}}}],
+        max_tokens=512,
+        temperature=0.6,
+    )
+    tc = r.choices[0].message.tool_calls
+    if tc and len(tc) > 0:
+        print(f'TOOL_CALL_OK: {tc[0].function.name}({tc[0].function.arguments})')
+    else:
+        content = r.choices[0].message.content or ''
+        print(f'NO_TOOL_CALL: model returned text ({len(content)} chars): {content[:200]}')
+except Exception as e:
+    print(f'ERROR: {e}')
+" 2>&1)
+echo "  Probe result: $PROBE_RESULT"
+
+if echo "$PROBE_RESULT" | grep -q "TOOL_CALL_OK"; then
+    echo "  Tool calling is working!"
+elif echo "$PROBE_RESULT" | grep -q "ERROR"; then
+    echo "  FATAL: Tool calling failed. Check vLLM flags (--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3)"
+    echo "  vLLM log: /scratch/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log"
+    kill $VLLM_PID 2>/dev/null || true
+    exit 1
+else
+    echo "  WARNING: Model did not use tool calling. It may work on real problems but tool call parsing may be unreliable."
+    echo "  Continuing anyway..."
 fi
 
 # ─── Run prediction generation ───
