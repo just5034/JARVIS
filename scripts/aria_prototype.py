@@ -398,14 +398,21 @@ def parse_adversarial_verification(
     Returns (challenges, verified_facts, alternative_approach, verdict).
 
     verdict is 'SUSPECT', 'SOLID', or 'unknown'.
-    Searches post-</think> first, falls back to full text.
+    Always searches the full raw output — Qwen3.5 puts structured content
+    inside <think> blocks, so post-</think> text is often empty/summary-only.
     """
-    # Use post-thinking text if it contains the markers, else search full output
-    text = strip_thinking(raw_output)
-    if "CHALLENGES:" not in text and "CHALLENGES:" in raw_output:
-        text = raw_output
-    if "VERDICT:" not in text and "VERDICT:" in raw_output:
-        text = raw_output
+    # ALWAYS search full output. Qwen3.5 puts structured markers inside <think>.
+    # Searching only post-</think> was the v3 bug: 29/30 passes returned "unknown".
+    text = raw_output
+
+    # Log what we're parsing for debug
+    stripped = strip_thinking(raw_output)
+    has_markers_in_think = "CHALLENGES:" in raw_output or "VERDICT:" in raw_output
+    has_markers_post_think = "CHALLENGES:" in stripped or "VERDICT:" in stripped
+    logger.debug(
+        f"Verify output: {len(raw_output)} chars, "
+        f"markers_in_full={has_markers_in_think}, markers_post_think={has_markers_post_think}"
+    )
 
     challenges = []
     facts = []
@@ -415,31 +422,52 @@ def parse_adversarial_verification(
     in_challenges = False
     in_verified_facts = False
 
+    # Flexible marker detection — Qwen3.5 may wrap markers in markdown
+    # formatting like **CHALLENGES:**, ## CHALLENGES, etc.
+    def _match_marker(line: str, marker: str) -> tuple[bool, str]:
+        """Check if line contains a section marker, return (matched, remainder)."""
+        # Strip markdown formatting
+        clean = line.strip().strip("*#").strip()
+        if clean.upper().startswith(marker.upper()):
+            remainder = clean[len(marker):].strip().strip(":").strip()
+            return True, remainder
+        return False, ""
+
     lines = text.split("\n")
     i = 0
     while i < len(lines):
         line = lines[i].strip()
 
-        if line.startswith("CHALLENGES:"):
+        matched, remainder = _match_marker(line, "CHALLENGES:")
+        if not matched:
+            matched, remainder = _match_marker(line, "CHALLENGES")
+        if matched:
             in_challenges = True
             in_verified_facts = False
-            remainder = line[len("CHALLENGES:"):].strip()
             if remainder and remainder.lower() != "none":
                 _parse_challenge_line(remainder, challenges, alternative, pass_number)
             i += 1
             continue
 
-        if line.startswith("ALTERNATIVE_APPROACH:"):
+        matched, remainder = _match_marker(line, "ALTERNATIVE_APPROACH:")
+        if not matched:
+            matched, remainder = _match_marker(line, "ALTERNATIVE APPROACH:")
+        if not matched:
+            matched, remainder = _match_marker(line, "ALTERNATIVE_APPROACH")
+        if matched:
             in_challenges = False
             in_verified_facts = False
-            alternative = line[len("ALTERNATIVE_APPROACH:"):].strip()
+            alternative = remainder
             i += 1
             continue
 
-        if line.startswith("VERDICT:"):
+        matched, remainder = _match_marker(line, "VERDICT:")
+        if not matched:
+            matched, remainder = _match_marker(line, "VERDICT")
+        if matched:
             in_challenges = False
             in_verified_facts = False
-            v = line[len("VERDICT:"):].strip().upper()
+            v = remainder.upper()
             if "SUSPECT" in v:
                 verdict = "SUSPECT"
             elif "SOLID" in v:
@@ -447,25 +475,37 @@ def parse_adversarial_verification(
             i += 1
             continue
 
-        if line.startswith("VERIFIED_FACTS:"):
+        matched, remainder = _match_marker(line, "VERIFIED_FACTS:")
+        if not matched:
+            matched, remainder = _match_marker(line, "VERIFIED FACTS:")
+        if not matched:
+            matched, remainder = _match_marker(line, "VERIFIED_FACTS")
+        if matched:
             in_challenges = False
             in_verified_facts = True
-            remainder = line[len("VERIFIED_FACTS:"):].strip()
             if remainder and remainder.lower() != "none":
                 _parse_fact_line(remainder, facts, pass_number)
             i += 1
             continue
 
-        if in_challenges and line.startswith("- "):
-            _parse_challenge_line(line[2:], challenges, alternative, pass_number)
-        elif in_verified_facts and line.startswith("- "):
-            _parse_fact_line(line[2:], facts, pass_number)
+        if in_challenges and (line.startswith("- ") or line.startswith("* ")):
+            _parse_challenge_line(line.lstrip("-* "), challenges, alternative, pass_number)
+        elif in_verified_facts and (line.startswith("- ") or line.startswith("* ")):
+            _parse_fact_line(line.lstrip("-* "), facts, pass_number)
 
         i += 1
 
     # Skeptic prior: only trust verified_facts if verdict is SOLID
     if verdict != "SOLID":
         facts = []
+
+    # Log parse results for debug
+    if verdict == "unknown" and not challenges:
+        # Log a snippet so we can diagnose WHY parsing failed
+        snippet = raw_output[-500:] if len(raw_output) > 500 else raw_output
+        logger.warning(
+            f"Parse returned unknown/empty. Last 500 chars of verify output:\n{snippet}"
+        )
 
     # Attach alternative approach to challenges (it's the adversary's main suggestion)
     if alternative and challenges:
