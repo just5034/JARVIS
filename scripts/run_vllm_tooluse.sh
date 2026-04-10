@@ -63,8 +63,10 @@ echo
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
 VLLM_PORT=8290
 PROXY_PORT=8001
+SHIM_PORT=8000
 VLLM_LOG="/scratch/bgde/jhill5/logs/tooluse-vllm-${SLURM_JOB_ID}.log"
 PROXY_LOG="/scratch/bgde/jhill5/logs/tooluse-proxy-${SLURM_JOB_ID}.log"
+SHIM_LOG="/scratch/bgde/jhill5/logs/tooluse-shim-${SLURM_JOB_ID}.log"
 
 echo "=== Tool-use experiment ==="
 echo "vLLM:    $(python -c 'import vllm; print(vllm.__version__)' 2>/dev/null || echo NOT_INSTALLED)"
@@ -131,39 +133,71 @@ if ! curl -s "http://localhost:$VLLM_PORT/health" > /dev/null 2>&1; then
     exit 1
 fi
 
-# ─── Launch the proxy ───
-echo "=== Launching tool-use proxy on :$PROXY_PORT (log: $PROXY_LOG) ==="
+# ─── Launch the OpenAI proxy ───
+echo "=== Launching OpenAI proxy on :$PROXY_PORT (log: $PROXY_LOG) ==="
 JARVIS_TOOLUSE_VLLM_URL="http://localhost:$VLLM_PORT" \
-    python -m jarvis.tooluse.server --host 0.0.0.0 --port $PROXY_PORT \
+    python -m jarvis.tooluse.server --mode openai --host 0.0.0.0 --port $PROXY_PORT \
     > "$PROXY_LOG" 2>&1 &
 PROXY_PID=$!
 
 sleep 5
 if ! curl -s "http://localhost:$PROXY_PORT/health" > /dev/null 2>&1; then
-    echo "Proxy failed to start. Last 40 lines:"
-    tail -40 "$PROXY_LOG"
+    echo "Proxy failed to start. Last 20 lines:"
+    tail -20 "$PROXY_LOG"
     kill $VLLM_PID $PROXY_PID 2>/dev/null || true
     exit 1
 fi
 echo "Proxy healthy."
 
-# ─── Smoke test ───
-# Disable set -e so we can capture the exit code and still run teardown.
-echo "=== Running smoke test ==="
+# ─── Launch the Anthropic shim ───
+echo "=== Launching Anthropic shim on :$SHIM_PORT (log: $SHIM_LOG) ==="
+JARVIS_ANTHROPIC_SHIM_UPSTREAM="http://localhost:$PROXY_PORT" \
+    python -m jarvis.tooluse.server --mode anthropic --host 0.0.0.0 --port $SHIM_PORT \
+    > "$SHIM_LOG" 2>&1 &
+SHIM_PID=$!
+
+sleep 5
+if ! curl -s "http://localhost:$SHIM_PORT/anthropic/health" > /dev/null 2>&1; then
+    echo "Shim failed to start. Last 20 lines:"
+    tail -20 "$SHIM_LOG"
+    kill $VLLM_PID $PROXY_PID $SHIM_PID 2>/dev/null || true
+    exit 1
+fi
+echo "Shim healthy."
+
+# ─── Smoke tests ───
+# Disable set -e so we can capture exit codes and still run teardown.
 set +e
+
+echo "=== Running OpenAI smoke tests ==="
 JARVIS_TOOLUSE_PROXY_URL="http://localhost:$PROXY_PORT" \
     python -m pytest tests/tooluse/test_smoke.py -v -s
-SMOKE_RC=$?
+OPENAI_RC=$?
+
+echo "=== Running Anthropic smoke tests ==="
+JARVIS_ANTHROPIC_SHIM_URL="http://localhost:$SHIM_PORT" \
+    python -m pytest tests/tooluse/test_anthropic_smoke.py -v -s
+ANTHROPIC_RC=$?
+
 set -e
 
 # ─── Teardown ───
 echo "=== Shutting down ==="
+kill $SHIM_PID 2>/dev/null || true
 kill $PROXY_PID 2>/dev/null || true
 kill $VLLM_PID 2>/dev/null || true
 wait 2>/dev/null || true
 
 echo
-echo "Smoke test exit code: $SMOKE_RC"
+echo "=========================================="
+echo "  OpenAI smoke tests:    exit code $OPENAI_RC"
+echo "  Anthropic smoke tests: exit code $ANTHROPIC_RC"
+echo "=========================================="
 echo "vLLM log:  $VLLM_LOG"
 echo "Proxy log: $PROXY_LOG"
-exit $SMOKE_RC
+echo "Shim log:  $SHIM_LOG"
+
+# Fail if either test suite failed
+if [ $OPENAI_RC -ne 0 ] || [ $ANTHROPIC_RC -ne 0 ]; then
+    exit 1
+fi
