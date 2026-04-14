@@ -75,7 +75,8 @@
       "WebFetch(domain:kenhuangus.substack.com)",
       "Bash(bash -n scripts/probe_toolcall.sh)",
       "Bash(find /d/jarvis-body -type f -name \"*.ts\" -exec grep -l \"type NormalizedMessage\\\\|type AssistantMessage\\\\|type Message\" {} \\\\;)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(ls scripts/aria*)"
     ]
   }
 }
