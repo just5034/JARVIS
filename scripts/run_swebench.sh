@@ -54,7 +54,10 @@ export TMPDIR=/tmp
 # ─── Paths ───
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
 EVAL_OUT="/scratch/bgde/jhill5/eval"
-WORKDIR="/scratch/bgde/jhill5/swebench_workspaces"
+# Repo clones are ephemeral — keep them on node-local scratch, not the
+# 500G shared /scratch/bgde (which other bgde users can fill).
+# Override with SWEBENCH_WORKDIR=... sbatch ... if needed.
+WORKDIR="${SWEBENCH_WORKDIR:-${TMPDIR:-/tmp}/swebench_workspaces}"
 PORT=8193  # different from ARIA's 8192 to avoid clashes
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
