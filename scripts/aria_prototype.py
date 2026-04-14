@@ -583,6 +583,7 @@ def run_aria(
     cache = ReasoningCache()
     all_attempts = []  # list of (answer, verdict) tuples
     all_raw_solutions = []
+    all_raw_verifies = []  # full verifier outputs, for diagnosing unknown verdicts
     early_exit_pass = None
     start_time = time.time()
 
@@ -629,6 +630,7 @@ def run_aria(
             temperature=0.2,
             max_tokens=verify_max_tokens,
         )
+        all_raw_verifies.append(verify_raw)
 
         new_challenges, new_facts, alternative, verdict = parse_adversarial_verification(
             verify_raw, pass_num,
@@ -682,6 +684,7 @@ def run_aria(
             final_answer = None
             selection_method = "no_answer"
 
+    all_unknown = cache.verdicts and all(v == "unknown" for v in cache.verdicts)
     return {
         "method": "aria_v3_adversarial",
         "passes_run": len(all_attempts),
@@ -696,6 +699,7 @@ def run_aria(
         "elapsed_seconds": elapsed,
         "total_input_tokens": llm.total_input_tokens,
         "total_output_tokens": llm.total_output_tokens,
+        "raw_verifies": all_raw_verifies if all_unknown else None,
     }
 
 

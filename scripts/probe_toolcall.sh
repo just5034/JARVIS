@@ -13,7 +13,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=120G
-#SBATCH --time=00:30:00
+#SBATCH --time=01:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
 #SBATCH --output=/scratch/bgde/jhill5/logs/probe-%j.out
@@ -50,9 +50,11 @@ VLLM_PID=$!
 
 echo "Waiting for vLLM (PID $VLLM_PID)..."
 WAITED=0
-while [ $WAITED -lt 1800 ]; do
+READY=0
+while [ $WAITED -lt 2700 ]; do
     if curl -s "http://localhost:${PORT}/health" > /dev/null 2>&1; then
         echo "vLLM ready (${WAITED}s)"
+        READY=1
         break
     fi
     if ! kill -0 $VLLM_PID 2>/dev/null; then
@@ -64,6 +66,14 @@ while [ $WAITED -lt 1800 ]; do
     sleep 10
     WAITED=$((WAITED + 10))
 done
+
+if [ $READY -ne 1 ]; then
+    echo "FATAL: vLLM did not become ready within ${WAITED}s"
+    echo "Last 40 lines of vLLM log:"
+    tail -40 /scratch/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log
+    kill $VLLM_PID 2>/dev/null || true
+    exit 1
+fi
 
 echo ""
 echo "=== Test 1: Tool call (should return TOOL_CALL_OK) ==="
