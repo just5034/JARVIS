@@ -21,9 +21,9 @@
 #SBATCH --mem=120G
 #SBATCH --time=08:00:00
 #SBATCH --exclusive
-#SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/swebench-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/swebench-%j.err
+#SBATCH --constraint="projects"
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/swebench-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/swebench-%j.err
 
 set -euo pipefail
 
@@ -42,26 +42,25 @@ done
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde/jhill5/jarvis-venv"
+VENV="/work/hdd/bgde/jhill5/jarvis-venv"
 source "$VENV/bin/activate"
 
 # Make sure openai client is installed (used by the agent)
 pip install --quiet openai datasets 2>&1 | tail -5 || true
 
-export HF_HOME=/tmp/hf_cache
+export HF_HOME=/work/hdd/bgde/jhill5/hf_cache
 export TMPDIR=/tmp
 
 # ─── Paths ───
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
-EVAL_OUT="/scratch/bgde/jhill5/eval"
-# Repo clones are ephemeral — keep them on node-local scratch, not the
-# 500G shared /scratch/bgde (which other bgde users can fill).
+EVAL_OUT="/work/hdd/bgde/jhill5/eval"
+# Repo clones are ephemeral — keep them on node-local scratch.
 # Override with SWEBENCH_WORKDIR=... sbatch ... if needed.
 WORKDIR="${SWEBENCH_WORKDIR:-${TMPDIR:-/tmp}/swebench_workspaces}"
 PORT=8193  # different from ARIA's 8192 to avoid clashes
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-mkdir -p "$EVAL_OUT" "$WORKDIR" /scratch/bgde/jhill5/logs
+mkdir -p "$EVAL_OUT" "$WORKDIR" /work/hdd/bgde/jhill5/logs
 
 # Determine output path (resume uses the latest existing file)
 if $RESUME; then
@@ -110,7 +109,7 @@ python -m vllm.entrypoints.openai.api_server \
     --enable-auto-tool-choice \
     --tool-call-parser qwen3_coder \
     --reasoning-parser qwen3 \
-    > /scratch/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log 2>&1 &
+    > /work/hdd/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log 2>&1 &
 
 VLLM_PID=$!
 echo "vLLM PID: $VLLM_PID"
@@ -125,7 +124,7 @@ while [ $WAITED -lt $MAX_WAIT ]; do
         break
     fi
     if ! kill -0 $VLLM_PID 2>/dev/null; then
-        echo "ERROR: vLLM died — check /scratch/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log"
+        echo "ERROR: vLLM died — check /work/hdd/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log"
         exit 1
     fi
     sleep 10
@@ -166,7 +165,7 @@ if echo "$PROBE_RESULT" | grep -q "TOOL_CALL_OK"; then
     echo "  Tool calling is working!"
 elif echo "$PROBE_RESULT" | grep -q "ERROR"; then
     echo "  FATAL: Tool calling failed. Check vLLM flags (--enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3)"
-    echo "  vLLM log: /scratch/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log"
+    echo "  vLLM log: /work/hdd/bgde/jhill5/logs/swebench-vllm-${SLURM_JOB_ID}.log"
     kill $VLLM_PID 2>/dev/null || true
     exit 1
 else

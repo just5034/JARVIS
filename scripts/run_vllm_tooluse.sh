@@ -19,9 +19,9 @@
 #SBATCH --mem=120G
 #SBATCH --time=01:00:00
 #SBATCH --exclusive
-#SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/tooluse-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/tooluse-%j.err
+#SBATCH --constraint="projects"
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/tooluse-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/tooluse-%j.err
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde/jhill5/jarvis-venv"
+VENV="/work/hdd/bgde/jhill5/jarvis-venv"
 if [ ! -d "$VENV" ]; then
     echo "ERROR: venv $VENV does not exist. Bootstrap with run_vllm_compat.sh first."
     exit 1
@@ -39,10 +39,10 @@ source "$VENV/bin/activate"
 # Ensure the tooluse package from this branch is installed, plus pytest for smoke tests
 pip install -e "/u/$USER/JARVIS" pytest httpx --quiet 2>&1 | tail -3
 
-mkdir -p /scratch/bgde/jhill5/logs
+mkdir -p /work/hdd/bgde/jhill5/logs
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
-export HF_HOME=/tmp/hf_cache
+export HF_HOME=/work/hdd/bgde/jhill5/hf_cache
 export TMPDIR=/tmp
 export PYTHONUNBUFFERED=1
 
@@ -64,9 +64,9 @@ BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
 VLLM_PORT=8290
 PROXY_PORT=8001
 SHIM_PORT=8000
-VLLM_LOG="/scratch/bgde/jhill5/logs/tooluse-vllm-${SLURM_JOB_ID}.log"
-PROXY_LOG="/scratch/bgde/jhill5/logs/tooluse-proxy-${SLURM_JOB_ID}.log"
-SHIM_LOG="/scratch/bgde/jhill5/logs/tooluse-shim-${SLURM_JOB_ID}.log"
+VLLM_LOG="/work/hdd/bgde/jhill5/logs/tooluse-vllm-${SLURM_JOB_ID}.log"
+PROXY_LOG="/work/hdd/bgde/jhill5/logs/tooluse-proxy-${SLURM_JOB_ID}.log"
+SHIM_LOG="/work/hdd/bgde/jhill5/logs/tooluse-shim-${SLURM_JOB_ID}.log"
 
 echo "=== Tool-use experiment ==="
 echo "vLLM:    $(python -c 'import vllm; print(vllm.__version__)' 2>/dev/null || echo NOT_INSTALLED)"

@@ -31,9 +31,9 @@
 #SBATCH --mem=120G
 #SBATCH --time=06:00:00
 #SBATCH --exclusive
-#SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/aria-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/aria-%j.err
+#SBATCH --constraint="projects"
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/aria-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/aria-%j.err
 
 set -euo pipefail
 
@@ -41,19 +41,19 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde/jhill5/jarvis-venv"
+VENV="/work/hdd/bgde/jhill5/jarvis-venv"
 source "$VENV/bin/activate"
 
-export HF_HOME=/tmp/hf_cache
+export HF_HOME=/work/hdd/bgde/jhill5/hf_cache
 export TMPDIR=/tmp
 
 # ─── Paths ───
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
-EVAL_OUT="/scratch/bgde/jhill5/eval"
+EVAL_OUT="/work/hdd/bgde/jhill5/eval"
 PORT=8192
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-mkdir -p "$EVAL_OUT" /scratch/bgde/jhill5/logs
+mkdir -p "$EVAL_OUT" /work/hdd/bgde/jhill5/logs
 
 # ─── Validate ───
 if [ ! -d "$BASE_MODEL" ]; then
@@ -78,7 +78,7 @@ python -m vllm.entrypoints.openai.api_server \
     --max-model-len 32768 \
     --port $PORT \
     --disable-log-stats \
-    2>&1 | tee /scratch/bgde/jhill5/logs/aria-vllm-${SLURM_JOB_ID}.log &
+    2>&1 | tee /work/hdd/bgde/jhill5/logs/aria-vllm-${SLURM_JOB_ID}.log &
 
 VLLM_PID=$!
 echo "vLLM PID: $VLLM_PID"

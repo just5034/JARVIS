@@ -15,17 +15,17 @@
 #SBATCH --mem=120G
 #SBATCH --time=01:00:00
 #SBATCH --exclusive
-#SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/probe-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/probe-%j.err
+#SBATCH --constraint="projects"
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/probe-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/probe-%j.err
 
 set -euo pipefail
 
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
-source /scratch/bgde/jhill5/jarvis-venv/bin/activate
+source /work/hdd/bgde/jhill5/jarvis-venv/bin/activate
 
-export HF_HOME=/tmp/hf_cache
+export HF_HOME=/work/hdd/bgde/jhill5/hf_cache
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
 PORT=8194
 
@@ -44,7 +44,7 @@ python -m vllm.entrypoints.openai.api_server \
     --enable-auto-tool-choice \
     --tool-call-parser qwen3_coder \
     --reasoning-parser qwen3 \
-    > /scratch/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log 2>&1 &
+    > /work/hdd/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log 2>&1 &
 
 VLLM_PID=$!
 
@@ -59,8 +59,8 @@ while [ $WAITED -lt 2700 ]; do
     fi
     if ! kill -0 $VLLM_PID 2>/dev/null; then
         echo "FATAL: vLLM died during startup"
-        echo "Check: /scratch/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log"
-        tail -30 /scratch/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log
+        echo "Check: /work/hdd/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log"
+        tail -30 /work/hdd/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log
         exit 1
     fi
     sleep 10
@@ -70,7 +70,7 @@ done
 if [ $READY -ne 1 ]; then
     echo "FATAL: vLLM did not become ready within ${WAITED}s"
     echo "Last 40 lines of vLLM log:"
-    tail -40 /scratch/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log
+    tail -40 /work/hdd/bgde/jhill5/logs/probe-vllm-${SLURM_JOB_ID}.log
     kill $VLLM_PID 2>/dev/null || true
     exit 1
 fi
