@@ -89,6 +89,21 @@ jarvis/
 - **Python module:** `module load python/3.13.5-gcc13.3.1` (NOT anaconda3, which doesn't exist on Delta). System Python is 3.9 — too old.
 - **Environments:** Use plain Python venv, not conda.
 
+### Delta storage paths (as of 2026-04-14 — `/scratch` is broken)
+
+NCSA's Lustre quota for `/scratch/bgde` is currently corrupted: reports ~481 GB used against a 500 GB group cap even though actual content is <120 MB. Orphaned OST objects. Ticket open with `help@ncsa.illinois.edu` (filed 2026-04-14). Until resolved, **do not write new large data to `/scratch`** — it counts against the bogus phantom quota and will fail.
+
+**Route all new writes to:**
+- `/work/hdd/bgde/jhill5/jarvis-venv` — Python venv
+- `/work/hdd/bgde/jhill5/hf_cache` — `HF_HOME`
+- `/work/hdd/bgde/jhill5/logs` — SLURM/vLLM logs
+- `$TMPDIR` — ephemeral workspaces (SWE-bench clones already use this)
+- `/projects/bgde/jhill5/models/` — persistent model weights (untouched by the bug)
+
+`/scratch/bgde/jhill5/eval`, `data`, `tb_logs` remain with preserved research artifacts (~116 MB total, also backed up to `/u/jhill5/scratch_backup/`). Reading is fine; writing there is not, until NCSA resolves.
+
+When submitting SLURM scripts, `export HF_HOME=/work/hdd/bgde/jhill5/hf_cache` and `source /work/hdd/bgde/jhill5/jarvis-venv/bin/activate` instead of the old `/scratch` paths.
+
 ## Git & Commit Rules
 
 - **No AI co-authorship lines.** Never add `Co-Authored-By` or any similar attribution to Claude, Anthropic, or any AI in commits.
