@@ -115,8 +115,8 @@ VLLM_PID=$!
 echo "vLLM PID: $VLLM_PID"
 
 # ─── Wait for vLLM ───
-echo "Waiting for vLLM (~15-20 min for Qwen3.5)..."
-MAX_WAIT=1800
+echo "Waiting for vLLM (~20-30 min for Qwen3.5)..."
+MAX_WAIT=2700
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
     if curl -s "http://localhost:${PORT}/health" > /dev/null 2>&1; then
