@@ -1,0 +1,16 @@
+# mini-swe-agent config for Qwen3.5-27B via local vLLM on Delta.
+# Merges with the default swebench.yaml from mini-swe-agent.
+#
+# Usage:
+#   mini-extra swebench -c swebench.yaml -c configs/swebench_vllm.yaml ...
+
+model:
+  model_name: "hosted_vllm//projects/bgde/jhill5/models/qwen3.5-27b"
+  model_kwargs:
+    api_base: "http://localhost:8193/v1"
+    drop_params: true
+    temperature: 1.0
+  cost_tracking: "ignore_errors"
+
+environment:
+  environment_class: singularity
