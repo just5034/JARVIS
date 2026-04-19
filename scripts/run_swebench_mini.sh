@@ -25,10 +25,12 @@
 
 set -euo pipefail
 
-# ─── Args (pass through to mini-extra swebench) ───
-SLICE="${1:---slice 0:5}"  # default: 5 instances for validation
-shift 2>/dev/null || true
-EXTRA_ARGS="$*"
+# ─── Args ───
+# Usage: sbatch scripts/run_swebench_mini.sh          -> 5 instances
+#        sbatch scripts/run_swebench_mini.sh 50        -> 50 instances
+#        sbatch scripts/run_swebench_mini.sh 0:500     -> full run
+N="${1:-0:5}"
+SLICE="--slice ${N}"
 
 # ─── Environment ───
 module load python/3.13.5-gcc13.3.1
@@ -119,8 +121,7 @@ mini-extra swebench \
     -c model.model_kwargs.api_base="http://localhost:${PORT}/v1" \
     -c model.model_kwargs.drop_params=true \
     -c model.model_kwargs.temperature=1.0 \
-    -c model.cost_tracking=ignore_errors \
-    $EXTRA_ARGS
+    -c model.cost_tracking=ignore_errors
 
 echo ""
 echo "=== mini-swe-agent complete ==="
