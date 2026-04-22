@@ -5,12 +5,20 @@ from __future__ import annotations
 import re
 from collections import Counter
 
+from jarvis.inference.thinking import strip_thinking
+
 
 class AnswerExtractor:
     """Extracts canonical answers from freeform model responses for voting."""
 
     def extract(self, text: str, domain: str) -> str:
-        """Extract the canonical answer from a response, domain-aware."""
+        """Extract the canonical answer from a response, domain-aware.
+
+        Strips thinking blocks (R1-Distill <think> tags or Qwen3.5
+        "Thinking Process:" text) before extraction so we only
+        match patterns in the actual answer portion.
+        """
+        text = strip_thinking(text)
         if domain == "math":
             return self._extract_math(text)
         elif domain == "code":

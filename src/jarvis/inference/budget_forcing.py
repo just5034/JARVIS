@@ -9,14 +9,7 @@ from __future__ import annotations
 
 import re
 
-# Patterns that indicate premature conclusion
-_CONCLUSION_PATTERNS = [
-    re.compile(r"</think>", re.IGNORECASE),
-    re.compile(r"\\boxed\{", re.IGNORECASE),
-    re.compile(r"\*\*Final Answer\*\*", re.IGNORECASE),
-    re.compile(r"(?:^|\n)(?:Therefore|Thus|Hence|In conclusion),?\s", re.IGNORECASE),
-    re.compile(r"(?:^|\n)The answer is\s", re.IGNORECASE),
-]
+from jarvis.inference.thinking import CONCLUSION_PATTERNS as _CONCLUSION_PATTERNS
 
 _CONTINUATION_PROMPT = "\nWait, let me reconsider this step.\n"
 
@@ -66,8 +59,11 @@ class BudgetForcer:
         """
         modified = output.rstrip()
 
-        # Strip </think> tag if present
+        # Strip conclusion markers from end of output
+        # R1-Distill: </think> tag
         modified = re.sub(r"</think>\s*$", "", modified)
+        # Qwen3.5: answer text after thinking block (keep thinking, strip answer)
+        modified = re.sub(r"(\nThinking Process:.*?)\n\n.+$", r"\1", modified, flags=re.DOTALL)
 
         modified += _CONTINUATION_PROMPT
         self._force_count += 1

@@ -11,6 +11,7 @@ from jarvis.inference.budget_forcing import BudgetForcer
 from jarvis.inference.context_manager import ContextManager
 from jarvis.inference.engine import InferenceEngine, InferenceResult
 from jarvis.inference.sampling import CandidateSampler
+from jarvis.inference.thinking import has_thinking, split_thinking, strip_thinking
 from jarvis.inference.verification import ThinkPRMVerifier
 from jarvis.inference.voting import AnswerExtractor, SelfConsistencyVoter
 from tests.conftest import MockModelHandle
@@ -21,6 +22,66 @@ def inference_config() -> InferenceConfig:
     config_dir = Path(__file__).resolve().parent.parent / "configs"
     config = load_config(config_dir)
     return config.inference
+
+
+# --- Thinking Format Handling ---
+
+
+class TestThinkingFormat:
+    """Tests for model-agnostic thinking block handling (R1-Distill + Qwen3.5)."""
+
+    def test_split_r1_distill(self) -> None:
+        text = "<think>Step 1: consider x=2\nStep 2: compute</think>\nThe answer is 42"
+        thinking, answer = split_thinking(text)
+        assert "Step 1" in thinking
+        assert "The answer is 42" in answer
+        assert "<think>" not in answer
+
+    def test_split_qwen35(self) -> None:
+        text = "Thinking Process:\nLet me work through this.\nFirst, x=2.\n\nThe answer is 42."
+        thinking, answer = split_thinking(text)
+        assert "Let me work through this" in thinking
+        assert "The answer is 42" in answer
+        assert "Thinking Process" not in answer
+
+    def test_split_no_thinking(self) -> None:
+        text = "The answer is simply 42."
+        thinking, answer = split_thinking(text)
+        assert thinking == ""
+        assert answer == text
+
+    def test_strip_r1(self) -> None:
+        text = "<think>reasoning</think>\n42"
+        assert "42" in strip_thinking(text)
+        assert "<think>" not in strip_thinking(text)
+
+    def test_strip_qwen35(self) -> None:
+        text = "Thinking Process:\nreasoning here\n\n42"
+        assert strip_thinking(text) == "42"
+
+    def test_has_thinking_r1(self) -> None:
+        assert has_thinking("<think>stuff</think>answer")
+        assert not has_thinking("just a plain answer")
+
+    def test_has_thinking_qwen35(self) -> None:
+        assert has_thinking("Thinking Process:\nstuff\n\nanswer")
+        assert not has_thinking("just a plain answer")
+
+    def test_answer_extraction_with_qwen35_thinking(self) -> None:
+        """Voting should extract answer from AFTER thinking block."""
+        ext = AnswerExtractor()
+        text = "Thinking Process:\nI need to compute 6*7.\n6*7=42.\n\nThe answer is \\boxed{42}"
+        assert ext.extract(text, "math") == "42"
+
+    def test_answer_extraction_with_r1_thinking(self) -> None:
+        ext = AnswerExtractor()
+        text = "<think>reasoning about math</think>\nTherefore \\boxed{42}"
+        assert ext.extract(text, "math") == "42"
+
+    def test_budget_forcer_detects_qwen35_conclusion(self) -> None:
+        bf = BudgetForcer(max_waits=3)
+        text = "Thinking Process:\nSome reasoning\n\nThe answer is 42"
+        assert bf.should_force(text, thinking_tokens=50, budget=1000)
 
 
 # --- AnswerExtractor ---
