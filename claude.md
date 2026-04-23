@@ -89,20 +89,24 @@ jarvis/
 - **Python module:** `module load python/3.13.5-gcc13.3.1` (NOT anaconda3, which doesn't exist on Delta). System Python is 3.9 — too old.
 - **Environments:** Use plain Python venv, not conda.
 
-### Delta storage paths (as of 2026-04-14 — `/scratch` is broken)
+### Delta storage paths
 
-NCSA's Lustre quota for `/scratch/bgde` is currently corrupted: reports ~481 GB used against a 500 GB group cap even though actual content is <120 MB. Orphaned OST objects. Ticket open with `help@ncsa.illinois.edu` (filed 2026-04-14). Until resolved, **do not write new large data to `/scratch`** — it counts against the bogus phantom quota and will fail.
+`/scratch` is a bind mount to `/work/hdd`. `lfs quota` sums `/work/hdd` + `/work/nvme` (they share MDTs on the same Lustre FS). NCSA confirmed 2026-04-15 — not a bug.
 
-**Route all new writes to:**
+**Write paths:**
 - `/work/hdd/bgde/jhill5/jarvis-venv` — Python venv
 - `/work/hdd/bgde/jhill5/hf_cache` — `HF_HOME`
 - `/work/hdd/bgde/jhill5/logs` — SLURM/vLLM logs
-- `$TMPDIR` — ephemeral workspaces (SWE-bench clones already use this)
-- `/projects/bgde/jhill5/models/` — persistent model weights (untouched by the bug)
+- `/work/hdd/bgde/jhill5/data` — training data, traces, filtered JSONL
+- `/work/hdd/bgde/jhill5/checkpoints` — training checkpoints
+- `/work/hdd/bgde/jhill5/eval` — eval outputs
+- `$TMPDIR` — ephemeral workspaces (SWE-bench clones, node-local SSD)
+- `/projects/bgde/jhill5/models/` — persistent model weights
+- `/projects/bgde/jhill5/adapters/` — final LoRA adapters
 
-`/scratch/bgde/jhill5/eval`, `data`, `tb_logs` remain with preserved research artifacts (~116 MB total, also backed up to `/u/jhill5/scratch_backup/`). Reading is fine; writing there is not, until NCSA resolves.
+All scripts under `scripts/` and `training/` have been updated to use `/work/hdd/bgde/jhill5/` (commit 6e6afaf, 2026-04-22).
 
-When submitting SLURM scripts, `export HF_HOME=/work/hdd/bgde/jhill5/hf_cache` and `source /work/hdd/bgde/jhill5/jarvis-venv/bin/activate` instead of the old `/scratch` paths.
+When submitting SLURM scripts, `export HF_HOME=/work/hdd/bgde/jhill5/hf_cache` and `source /work/hdd/bgde/jhill5/jarvis-venv/bin/activate`.
 
 ## Git & Commit Rules
 
@@ -123,13 +127,13 @@ When submitting SLURM scripts, `export HF_HOME=/work/hdd/bgde/jhill5/hf_cache` a
 
 ## Current Status
 
-**Phases 0-6 complete (0-3 validated on Delta).** Full serving stack: vLLM inference, 8-domain router, difficulty-aware amplification (single_pass/best-of-N/verified), specialist loading with LRU eviction (ESM3/Evo2 adapters), RAG for physics queries (30-passage corpus). 142 tests passing. S* code execution verification implemented.
+**Phases 0-6 complete (0-3 validated on Delta).** Full serving stack: vLLM inference, 8-domain router, difficulty-aware amplification (single_pass/best-of-N/verified), specialist loading with LRU eviction (ESM3/Evo2 adapters), RAG for physics queries (30-passage corpus). 164 tests passing. S* code execution verification implemented.
 
-**Migration in progress (2026-04-01):** Pivoting from dual-base (R1-Distill-Qwen-32B + Qwen2.5-Coder-32B-Instruct) to single Qwen3.5-27B. Configs and docs updated. Next: cancel old SFT job, download Qwen3.5-27B to Delta, run baseline evals, simplify brain_manager.py and router code, verify inference pipeline compatibility (ThinkPRM, budget forcing), train HEP LoRA adapters.
+**Qwen3.5-27B migration complete (2026-04-22).** Single-base architecture. Baselines validated on Delta: GPQA 85.4%, AIME 89.2%, LiveCodeBench 82.5%. SWE-bench validated at 50% on astropy-heavy sample (consistent with published 72.4%) using mini-swe-agent framework. Inference amplification (budget forcing, voting, ThinkPRM) updated for Qwen3.5's "Thinking Process:" format (not `<think>` tags).
 
-**Phase 4A trace generation (old model) completed** — 5,000 traces archived. Phase 4B SFT job (17177608) pending cancellation — was training adapter for deprecated R1-Distill-Qwen-32B.
+**HEP LoRA pipeline — Phase 0 complete (2026-04-22).** All `/scratch` paths fixed to `/work/hdd`. `run_sft.py` bugs fixed (callbacks, thinking format). Full plan approved — see `.claude/plans/snug-weaving-tiger.md`. **Next: Phase 1 — create GRACE data extraction scripts** (`extract_hep_physics.py`, `extract_hep_code.py`) to mine ~800 HEP training examples from GRACE knowledge graphs, YAML data, and GDML geometry files.
 
-**Budget:** ~8,000 SUs total, ~76 SU spent. ~7,924 remaining for baseline evals, HEP LoRA training, and optional GRPO.
+**Budget:** ~8,000 SUs total, ~100 SU spent. ~7,900 remaining for HEP LoRA training (~470 SU planned).
 
 ## Key Reference Documents
 
