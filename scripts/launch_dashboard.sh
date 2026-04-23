@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-LOG_DIR="${TB_LOG_DIR:-/scratch/bgde/jhill5/tb_logs}"
+LOG_DIR="${TB_LOG_DIR:-/work/hdd/bgde/jhill5/tb_logs}"
 PORT="${TB_PORT:-6006}"
 
 echo "=== JARVIS Training Dashboard (TensorBoard) ==="

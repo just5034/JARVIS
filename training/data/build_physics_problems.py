@@ -10,8 +10,8 @@ Sources:
 
 Usage:
     python -m training.data.build_physics_problems \
-        --benchmarks-dir /scratch/bgde/jhill5/data/benchmarks \
-        --output /scratch/bgde/jhill5/data/physics_problems.jsonl
+        --benchmarks-dir /work/hdd/bgde/jhill5/data/benchmarks \
+        --output /work/hdd/bgde/jhill5/data/physics_problems.jsonl
 """
 
 from __future__ import annotations
@@ -234,12 +234,12 @@ def main():
     parser = argparse.ArgumentParser(description="Build physics problem set for trace generation")
     parser.add_argument(
         "--benchmarks-dir",
-        default="/scratch/bgde/jhill5/data/benchmarks",
+        default="/work/hdd/bgde/jhill5/data/benchmarks",
         help="Directory containing downloaded benchmarks",
     )
     parser.add_argument(
         "--output",
-        default="/scratch/bgde/jhill5/data/physics_problems.jsonl",
+        default="/work/hdd/bgde/jhill5/data/physics_problems.jsonl",
         help="Output JSONL file",
     )
     args = parser.parse_args()

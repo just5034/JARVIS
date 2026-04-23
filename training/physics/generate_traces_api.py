@@ -6,16 +6,16 @@ physics problems. Output is used for distillation SFT in Phase 4B.
 
 Usage:
     python -m training.physics.generate_traces_api \
-        --problems /scratch/bgde/jhill5/data/physics_problems.jsonl \
-        --output /scratch/bgde/jhill5/data/physics_traces/ \
+        --problems /work/hdd/bgde/jhill5/data/physics_problems.jsonl \
+        --output /work/hdd/bgde/jhill5/data/physics_traces/ \
         --model deepseek-reasoner \
         --api-base https://api.deepseek.com/v1 \
         --traces-per-problem 8
 
     # Or use a local vLLM server:
     python -m training.physics.generate_traces_api \
-        --problems /scratch/bgde/jhill5/data/physics_problems.jsonl \
-        --output /scratch/bgde/jhill5/data/physics_traces/ \
+        --problems /work/hdd/bgde/jhill5/data/physics_problems.jsonl \
+        --output /work/hdd/bgde/jhill5/data/physics_traces/ \
         --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
         --api-base http://localhost:8000/v1 \
         --traces-per-problem 8

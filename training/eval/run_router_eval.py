@@ -8,8 +8,8 @@ Metrics:
 Usage:
     python -m training.eval.run_router_eval \
         --router-model /projects/bgde/jhill5/models/router_bert \
-        --data-dir /scratch/bgde/jhill5/data/benchmarks \
-        --output /scratch/bgde/jhill5/eval/router.json
+        --data-dir /work/hdd/bgde/jhill5/data/benchmarks \
+        --output /work/hdd/bgde/jhill5/eval/router.json
 """
 
 from __future__ import annotations
@@ -30,13 +30,13 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--data-dir",
-        default="/scratch/bgde/jhill5/data/benchmarks",
+        default="/work/hdd/bgde/jhill5/data/benchmarks",
         help="Directory containing router_eval.jsonl",
     )
     parser.add_argument("--output", required=True, help="Path to save results JSON")
     parser.add_argument(
         "--log-dir",
-        default="/scratch/bgde/jhill5/tb_logs",
+        default="/work/hdd/bgde/jhill5/tb_logs",
         help="TensorBoard log directory",
     )
     parser.add_argument("--no-track", action="store_true", help="Disable TensorBoard tracking")

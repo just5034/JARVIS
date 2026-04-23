@@ -200,14 +200,14 @@ def format_text(snapshot: dict) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Generate training progress snapshot")
     parser.add_argument(
-        "--log-dir", default="/scratch/bgde/jhill5/tb_logs", help="TensorBoard log directory"
+        "--log-dir", default="/work/hdd/bgde/jhill5/tb_logs", help="TensorBoard log directory"
     )
     parser.add_argument(
-        "--eval-dir", default="/scratch/bgde/jhill5/eval", help="Eval results directory"
+        "--eval-dir", default="/work/hdd/bgde/jhill5/eval", help="Eval results directory"
     )
     parser.add_argument(
         "--checkpoint-dir",
-        default="/scratch/bgde/jhill5/checkpoints",
+        default="/work/hdd/bgde/jhill5/checkpoints",
         help="Checkpoints directory",
     )
     parser.add_argument("--output", default=None, help="Save snapshot to file")

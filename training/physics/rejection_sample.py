@@ -8,8 +8,8 @@ to keep only correct, high-quality reasoning chains. Quality signals:
 
 Usage:
     python -m training.physics.rejection_sample \
-        --traces /scratch/bgde/jhill5/data/physics_traces/traces.jsonl \
-        --output /scratch/bgde/jhill5/data/physics_filtered_100k.jsonl \
+        --traces /work/hdd/bgde/jhill5/data/physics_traces/traces.jsonl \
+        --output /work/hdd/bgde/jhill5/data/physics_filtered_100k.jsonl \
         --target-count 100000
 """
 

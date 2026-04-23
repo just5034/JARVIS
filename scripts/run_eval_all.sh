@@ -26,8 +26,8 @@
 #SBATCH --time=32:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/eval-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/eval-%j.err
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/eval-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/eval-%j.err
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde/jhill5/jarvis-venv"
+VENV="/work/hdd/bgde/jhill5/jarvis-venv"
 if [ ! -d "$VENV" ]; then
     python -m venv "$VENV"
     source "$VENV/bin/activate"
@@ -49,9 +49,9 @@ export TMPDIR=/tmp
 
 # ─── Paths ───
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
-DATA="/scratch/bgde/jhill5/data/benchmarks"
-EVAL_OUT="/scratch/bgde/jhill5/eval"
-TB_LOGS="/scratch/bgde/jhill5/tb_logs"
+DATA="/work/hdd/bgde/jhill5/data/benchmarks"
+EVAL_OUT="/work/hdd/bgde/jhill5/eval"
+TB_LOGS="/work/hdd/bgde/jhill5/tb_logs"
 ROUTER_MODEL="/projects/bgde/jhill5/models/router_bert"
 
 mkdir -p "$EVAL_OUT" "$TB_LOGS"

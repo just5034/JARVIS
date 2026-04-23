@@ -9,8 +9,8 @@ import json
 import sys
 from pathlib import Path
 
-EVAL_DIR = "/scratch/bgde/jhill5/eval"
-DATA_DIR = "/scratch/bgde/jhill5/data/benchmarks"
+EVAL_DIR = "/work/hdd/bgde/jhill5/eval"
+DATA_DIR = "/work/hdd/bgde/jhill5/data/benchmarks"
 
 
 def find_latest(prefix):

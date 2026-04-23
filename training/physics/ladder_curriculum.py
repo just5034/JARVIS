@@ -8,9 +8,9 @@ Reference: LADDER (Learning through Ascending Difficulty for Efficient Reasoning
 
 Usage:
     python -m training.physics.ladder_curriculum \
-        --hard-problems /scratch/bgde/jhill5/data/hard_physics_5k.jsonl \
+        --hard-problems /work/hdd/bgde/jhill5/data/hard_physics_5k.jsonl \
         --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
-        --output /scratch/bgde/jhill5/data/ladder_curriculum/ \
+        --output /work/hdd/bgde/jhill5/data/ladder_curriculum/ \
         --api-base http://localhost:8000/v1
 """
 

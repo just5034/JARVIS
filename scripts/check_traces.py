@@ -1,13 +1,13 @@
 """Quick quality checks on filtered traces before SFT.
 
 Usage:
-    python scripts/check_traces.py /scratch/bgde/jhill5/data/physics_filtered.jsonl
+    python scripts/check_traces.py /work/hdd/bgde/jhill5/data/physics_filtered.jsonl
 """
 import json
 import sys
 from collections import Counter
 
-path = sys.argv[1] if len(sys.argv) > 1 else "/scratch/bgde/jhill5/data/physics_filtered.jsonl"
+path = sys.argv[1] if len(sys.argv) > 1 else "/work/hdd/bgde/jhill5/data/physics_filtered.jsonl"
 
 domains = Counter()
 short = 0

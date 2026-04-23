@@ -21,8 +21,8 @@
 #SBATCH --time=48:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/physics-sft-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/physics-sft-%j.err
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/physics-sft-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/physics-sft-%j.err
 
 set -euo pipefail
 
@@ -30,7 +30,7 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde/jhill5/jarvis-venv"
+VENV="/work/hdd/bgde/jhill5/jarvis-venv"
 source "$VENV/bin/activate"
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
@@ -41,9 +41,9 @@ export HF_HOME=/tmp/hf_cache
 
 # ─── Paths ───
 BASE_MODEL="/projects/bgde/jhill5/models/r1-distill-qwen-32b"
-TRAIN_DATA="/scratch/bgde/jhill5/data/physics_filtered_100k.jsonl"
-OUTPUT_DIR="/scratch/bgde/jhill5/checkpoints/physics_sft"
-TB_LOGS="/scratch/bgde/jhill5/tb_logs"
+TRAIN_DATA="/work/hdd/bgde/jhill5/data/physics_filtered_100k.jsonl"
+OUTPUT_DIR="/work/hdd/bgde/jhill5/checkpoints/physics_sft"
+TB_LOGS="/work/hdd/bgde/jhill5/tb_logs"
 
 echo "=== JARVIS Physics SFT (Phase 4B) ==="
 echo "Job ID:     $SLURM_JOB_ID"
@@ -109,8 +109,8 @@ echo "=== Running post-SFT GPQA eval ==="
 python -m training.eval.run_gpqa \
     --model "$BASE_MODEL" \
     --adapter "$OUTPUT_DIR/final" \
-    --output "/scratch/bgde/jhill5/eval/gpqa_post_sft_$(date +%Y%m%d).json" \
-    --data-dir "/scratch/bgde/jhill5/data/benchmarks" \
+    --output "/work/hdd/bgde/jhill5/eval/gpqa_post_sft_$(date +%Y%m%d).json" \
+    --data-dir "/work/hdd/bgde/jhill5/data/benchmarks" \
     --log-dir "$TB_LOGS" \
     --experiment "physics_sft"
 

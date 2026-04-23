@@ -10,8 +10,8 @@ Usage:
     python -m training.eval.run_swebench \\
         --base-url http://localhost:8000/v1 \\
         --model /projects/bgde/jhill5/models/qwen3.5-27b \\
-        --output /scratch/bgde/jhill5/eval/swebench_predictions.json \\
-        --workdir /scratch/bgde/jhill5/swebench_workspaces \\
+        --output /work/hdd/bgde/jhill5/eval/swebench_predictions.json \\
+        --workdir /work/hdd/bgde/jhill5/swebench_workspaces \\
         --n-instances 20
 
 Setup notes:

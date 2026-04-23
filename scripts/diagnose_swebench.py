@@ -2,7 +2,7 @@
 """Diagnose SWE-bench prediction results.
 
 Usage:
-    python scripts/diagnose_swebench.py /scratch/bgde/jhill5/eval/swebench_qwen35_*.json
+    python scripts/diagnose_swebench.py /work/hdd/bgde/jhill5/eval/swebench_qwen35_*.json
     python scripts/diagnose_swebench.py  # auto-finds latest
 """
 
@@ -11,7 +11,7 @@ import glob
 import sys
 from pathlib import Path
 
-EVAL_DIR = "/scratch/bgde/jhill5/eval"
+EVAL_DIR = "/work/hdd/bgde/jhill5/eval"
 
 
 def find_latest():

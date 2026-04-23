@@ -8,7 +8,7 @@ Usage:
     python -m training.eval.run_gpqa \
         --model /projects/bgde/jhill5/models/r1-distill-qwen-32b \
         --adapter /projects/bgde/jhill5/adapters/physics_general \
-        --output /scratch/bgde/jhill5/eval/gpqa_diamond.json
+        --output /work/hdd/bgde/jhill5/eval/gpqa_diamond.json
 """
 
 from __future__ import annotations

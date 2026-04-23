@@ -2,7 +2,7 @@
 import json
 import sys
 
-DATA_PATH = "/scratch/bgde/jhill5/data/benchmarks/livecode/livecode_bench.jsonl"
+DATA_PATH = "/work/hdd/bgde/jhill5/data/benchmarks/livecode/livecode_bench.jsonl"
 
 with open(DATA_PATH) as f:
     problems = [json.loads(l) for l in f]
@@ -37,7 +37,7 @@ for p in problems[:5]:
         print()
 
 # Check the last eval results for failure patterns
-EVAL_PATH = "/scratch/bgde/jhill5/eval/livecode_20260326.json"
+EVAL_PATH = "/work/hdd/bgde/jhill5/eval/livecode_20260326.json"
 try:
     with open(EVAL_PATH) as f:
         results = json.load(f)

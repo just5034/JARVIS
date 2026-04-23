@@ -8,7 +8,7 @@ Target: >= 81% for Qwen3.5-27B
 Usage:
     python -m training.eval.run_aime \
         --model /projects/bgde/jhill5/models/qwen3.5-27b \
-        --output /scratch/bgde/jhill5/eval/aime_2024.json \
+        --output /work/hdd/bgde/jhill5/eval/aime_2024.json \
         --n-samples 4
 """
 

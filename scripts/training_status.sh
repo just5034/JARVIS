@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-SCRATCH="/scratch/bgde/jhill5"
+SCRATCH="/work/hdd/bgde/jhill5"
 LOGS="$SCRATCH/logs"
 EVAL="$SCRATCH/eval"
 CHECKPOINTS="$SCRATCH/checkpoints"

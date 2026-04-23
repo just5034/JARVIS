@@ -24,8 +24,8 @@
 #SBATCH --time=48:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/hep-sft-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/hep-sft-%j.err
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/hep-sft-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/hep-sft-%j.err
 
 set -euo pipefail
 
@@ -33,7 +33,7 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde/jhill5/jarvis-venv"
+VENV="/work/hdd/bgde/jhill5/jarvis-venv"
 source "$VENV/bin/activate"
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
@@ -60,16 +60,16 @@ fi
 
 # ─── Paths ───
 BASE_MODEL="/projects/bgde/jhill5/models/qwen3.5-27b"
-TB_LOGS="/scratch/bgde/jhill5/tb_logs"
+TB_LOGS="/work/hdd/bgde/jhill5/tb_logs"
 
 if [ "$ADAPTER_TYPE" = "physics" ]; then
-    TRAIN_DATA="/scratch/bgde/jhill5/data/hep_physics_filtered.jsonl"
-    OUTPUT_DIR="/scratch/bgde/jhill5/checkpoints/hep_physics"
+    TRAIN_DATA="/work/hdd/bgde/jhill5/data/hep_physics_filtered.jsonl"
+    OUTPUT_DIR="/work/hdd/bgde/jhill5/checkpoints/hep_physics"
     ADAPTER_NAME="hep_physics"
     EVAL_EXPERIMENT="hep_physics_sft"
 elif [ "$ADAPTER_TYPE" = "code" ]; then
-    TRAIN_DATA="/scratch/bgde/jhill5/data/hep_code_filtered.jsonl"
-    OUTPUT_DIR="/scratch/bgde/jhill5/checkpoints/hep_code"
+    TRAIN_DATA="/work/hdd/bgde/jhill5/data/hep_code_filtered.jsonl"
+    OUTPUT_DIR="/work/hdd/bgde/jhill5/checkpoints/hep_code"
     ADAPTER_NAME="hep_code"
     EVAL_EXPERIMENT="hep_code_sft"
 fi
@@ -157,8 +157,8 @@ echo "=== Running post-SFT GPQA eval ==="
 python -m training.eval.run_gpqa \
     --model "$BASE_MODEL" \
     --adapter "$FINAL_ADAPTER" \
-    --output "/scratch/bgde/jhill5/eval/gpqa_${ADAPTER_NAME}_$(date +%Y%m%d).json" \
-    --data-dir "/scratch/bgde/jhill5/data/benchmarks" \
+    --output "/work/hdd/bgde/jhill5/eval/gpqa_${ADAPTER_NAME}_$(date +%Y%m%d).json" \
+    --data-dir "/work/hdd/bgde/jhill5/data/benchmarks" \
     --log-dir "$TB_LOGS" \
     --experiment "$EVAL_EXPERIMENT"
 

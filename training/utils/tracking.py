@@ -1,7 +1,7 @@
 """TensorBoard-based experiment tracking for JARVIS training and evaluation.
 
 TensorBoard ships with PyTorch — no extra install needed.
-View dashboard: tensorboard --logdir /scratch/bgde/jhill5/tb_logs
+View dashboard: tensorboard --logdir /work/hdd/bgde/jhill5/tb_logs
 SSH tunnel: ssh -L 6006:localhost:6006 jhill5@login.delta.ncsa.illinois.edu
 Open: http://localhost:6006
 """
@@ -24,7 +24,7 @@ except ImportError:
     SummaryWriter = None
 
 
-DEFAULT_LOG_DIR = "/scratch/bgde/jhill5/tb_logs"
+DEFAULT_LOG_DIR = "/work/hdd/bgde/jhill5/tb_logs"
 
 
 class TrainingTracker:

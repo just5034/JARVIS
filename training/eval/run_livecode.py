@@ -13,7 +13,7 @@ Key differences from non-thinking eval:
 Usage:
     python -m training.eval.run_livecode \
         --model /projects/bgde/jhill5/models/qwen3.5-27b \
-        --output /scratch/bgde/jhill5/eval/livecode.json \
+        --output /work/hdd/bgde/jhill5/eval/livecode.json \
         --n-samples 8
 """
 

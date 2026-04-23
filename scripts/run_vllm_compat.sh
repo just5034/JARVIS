@@ -19,8 +19,8 @@
 #SBATCH --time=01:00:00
 #SBATCH --exclusive
 #SBATCH --constraint="scratch&projects"
-#SBATCH --output=/scratch/bgde/jhill5/logs/compat-%j.out
-#SBATCH --error=/scratch/bgde/jhill5/logs/compat-%j.err
+#SBATCH --output=/work/hdd/bgde/jhill5/logs/compat-%j.out
+#SBATCH --error=/work/hdd/bgde/jhill5/logs/compat-%j.err
 
 set -euo pipefail
 
@@ -28,7 +28,7 @@ set -euo pipefail
 module load python/3.13.5-gcc13.3.1
 module load cudatoolkit/25.3_12.8
 
-VENV="/scratch/bgde/jhill5/jarvis-venv"
+VENV="/work/hdd/bgde/jhill5/jarvis-venv"
 if [ ! -d "$VENV" ]; then
     echo "Creating venv at $VENV..."
     python -m venv "$VENV"
@@ -51,7 +51,7 @@ PASSED=0
 FAILED=0
 TOTAL=0
 
-mkdir -p /scratch/bgde/jhill5/logs
+mkdir -p /work/hdd/bgde/jhill5/logs
 
 # ─── Helpers ───
 pass_test() {
@@ -101,7 +101,7 @@ echo ""
 
 # ─── Test 2: vLLM can load Qwen3.5 architecture ───
 echo "=== Test 2: vLLM loads Qwen3.5-27B ==="
-VLLM_LOG="/scratch/bgde/jhill5/logs/vllm-compat-${SLURM_JOB_ID}.log"
+VLLM_LOG="/work/hdd/bgde/jhill5/logs/vllm-compat-${SLURM_JOB_ID}.log"
 
 python -m vllm.entrypoints.openai.api_server \
     --model "$BASE_MODEL" \

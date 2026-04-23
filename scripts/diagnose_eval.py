@@ -2,8 +2,8 @@
 """Diagnose eval failures from the latest baseline run.
 
 Usage (on Delta):
-    python scripts/diagnose_eval.py /scratch/bgde/jhill5/eval/livecode_qwen35_20260403_061207.json
-    python scripts/diagnose_eval.py /scratch/bgde/jhill5/eval/aime_2024_qwen35_20260403_061207.json
+    python scripts/diagnose_eval.py /work/hdd/bgde/jhill5/eval/livecode_qwen35_20260403_061207.json
+    python scripts/diagnose_eval.py /work/hdd/bgde/jhill5/eval/aime_2024_qwen35_20260403_061207.json
 """
 
 import json
@@ -192,8 +192,8 @@ def main():
         print("Usage: python scripts/diagnose_eval.py <results.json>")
         print()
         print("Examples:")
-        print("  python scripts/diagnose_eval.py /scratch/bgde/jhill5/eval/livecode_qwen35_20260403_061207.json")
-        print("  python scripts/diagnose_eval.py /scratch/bgde/jhill5/eval/aime_2024_qwen35_20260403_061207.json")
+        print("  python scripts/diagnose_eval.py /work/hdd/bgde/jhill5/eval/livecode_qwen35_20260403_061207.json")
+        print("  python scripts/diagnose_eval.py /work/hdd/bgde/jhill5/eval/aime_2024_qwen35_20260403_061207.json")
         sys.exit(1)
 
     path = Path(sys.argv[1])

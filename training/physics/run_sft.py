@@ -83,15 +83,12 @@ class TraceDataset(Dataset):
         trace = entry.get("trace", "")
         reasoning = entry.get("reasoning", "")
 
-        # If there's a separate reasoning field (R1 format), prepend it
+        # If there's a separate reasoning field, prepend it as thinking block.
+        # Qwen3.5 uses "Thinking Process:" format (not <think> XML tags).
         if reasoning:
-            full_response = f"<think>\n{reasoning}\n</think>\n\n{trace}"
+            full_response = f"Thinking Process:\n{reasoning}\n\n{trace}"
         else:
-            # vLLM sometimes strips the opening <think> tag from R1 models
-            if "</think>" in trace and "<think>" not in trace:
-                full_response = f"<think>\n{trace}"
-            else:
-                full_response = trace
+            full_response = trace
 
         # Build chat format
         messages = [
@@ -185,7 +182,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
-        callbacks=callbacks,
+        callbacks=[],
     )
 
     trainer.train()
