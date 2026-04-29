@@ -40,3 +40,8 @@ htmlcov/
 # Temp
 *.tmp
 /tmp/
+
+# SWE-bench / eval prediction artifacts produced at the repo root
+/preds.json
+/preds*.json
+/hosted_vllm_*.json

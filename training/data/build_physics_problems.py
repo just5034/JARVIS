@@ -202,6 +202,35 @@ def load_mmlu_physics(benchmarks_dir: Path) -> list[dict]:
     return problems
 
 
+def load_grace_hep(grace_jsonl: Path) -> list[dict]:
+    """Load HEP physics problems extracted from GRACE.
+
+    Expects the JSONL produced by `training.data.extract_hep_physics`. Each
+    record has {problem, domain, difficulty, source}; we add an `id` field
+    and forward `source` as-is so trace filtering can stratify by GRACE
+    sub-source (scintillator_kg, detector_geometry_kg, etc.).
+    """
+    if not grace_jsonl.exists():
+        print(f"  WARNING: GRACE HEP data not found at {grace_jsonl}")
+        return []
+
+    problems: list[dict] = []
+    with open(grace_jsonl, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            problems.append({
+                "id": f"grace_hep_{len(problems)}",
+                "problem": row["problem"],
+                "domain": row.get("domain", "hep_experiment"),
+                "difficulty": row.get("difficulty", "hard"),
+                "source": row.get("source", "grace/hep_physics"),
+            })
+    return problems
+
+
 def load_gpqa_physics(benchmarks_dir: Path) -> list[dict]:
     """Load GPQA Diamond questions (all are graduate-level science)."""
     gpqa_path = benchmarks_dir / "gpqa" / "gpqa_diamond.jsonl"
@@ -242,6 +271,12 @@ def main():
         default="/work/hdd/bgde/jhill5/data/physics_problems.jsonl",
         help="Output JSONL file",
     )
+    parser.add_argument(
+        "--grace-hep-jsonl",
+        default="/work/hdd/bgde/jhill5/data/hep_physics_problems.jsonl",
+        help="Path to GRACE-extracted HEP physics problems JSONL "
+             "(produced by training.data.extract_hep_physics).",
+    )
     args = parser.parse_args()
 
     benchmarks_dir = Path(args.benchmarks_dir)
@@ -253,19 +288,25 @@ def main():
         p["id"] = f"curated_{i}"
         p["source"] = "curated"
         all_problems.append(p)
-    print(f"  → {len(CURATED_PROBLEMS)} curated problems")
+    print(f"  -> {len(CURATED_PROBLEMS)} curated problems")
 
     # 2. MMLU physics
     print("[problems] loading MMLU physics...")
     mmlu = load_mmlu_physics(benchmarks_dir)
     all_problems.extend(mmlu)
-    print(f"  → {len(mmlu)} MMLU physics problems")
+    print(f"  -> {len(mmlu)} MMLU physics problems")
 
     # 3. GPQA Diamond
     print("[problems] loading GPQA Diamond...")
     gpqa = load_gpqa_physics(benchmarks_dir)
     all_problems.extend(gpqa)
-    print(f"  → {len(gpqa)} GPQA problems")
+    print(f"  -> {len(gpqa)} GPQA problems")
+
+    # 4. GRACE HEP physics extractions
+    print("[problems] loading GRACE HEP physics...")
+    grace_hep = load_grace_hep(Path(args.grace_hep_jsonl))
+    all_problems.extend(grace_hep)
+    print(f"  -> {len(grace_hep)} GRACE HEP problems")
 
     # Assign IDs
     for i, p in enumerate(all_problems):
@@ -275,9 +316,9 @@ def main():
     # Save
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         for p in all_problems:
-            f.write(json.dumps(p) + "\n")
+            f.write(json.dumps(p, ensure_ascii=False) + "\n")
 
     # Summary
     from collections import Counter

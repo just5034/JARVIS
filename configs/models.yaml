@@ -47,6 +47,49 @@ infrastructure:
     size_gb: 0.09
     load_policy: "always_resident"
 
+deferred_backends:
+  # Models archived to D:\jarvis-models\ (external SSD).
+  # Not runnable on current DGX Spark target (128 GB unified RAM) — see archive_v4_to_ssd.ps1.
+  # To activate: change load_policy to "on_demand" or "always_resident" and copy weights
+  # to the production model directory.
+
+  deepseek_v4_flash:
+    model_id: "deepseek-ai/DeepSeek-V4-Flash"
+    architecture: "deepseek-v4"
+    path: "D:/jarvis-models/deepseek/v4-flash-fp4"
+    size_gb: 150.0
+    quantization: "fp4_fp8_native"
+    context_length: 1048576
+    activated_params_b: 13
+    total_params_b: 292
+    load_policy: "archived"
+    hardware_requirement: "Apple M3 Ultra 256GB / 2x H100 80GB / DGX Station"
+    note: "Realistic escalation target for difficulty=hard queries. Native FP4+FP8 — do not sub-Q4 quantize."
+
+  deepseek_v4_pro:
+    model_id: "deepseek-ai/DeepSeek-V4-Pro"
+    architecture: "deepseek-v4"
+    path: "D:/jarvis-models/deepseek/v4-pro-fp4"
+    size_gb: 850.0
+    quantization: "fp4_fp8_native"
+    context_length: 1048576
+    activated_params_b: 49
+    total_params_b: 1600
+    load_policy: "archived"
+    hardware_requirement: "DGX Station GB300 / 8x H100 / 4x Mac Studio cluster"
+    note: "Archival only. Kept locally because MIT-licensed mirrors not guaranteed to persist on HF."
+
+  deepseek_v4_flash_mlx:
+    model_id: "mlx-community/DeepSeek-V4-Flash-4bit"
+    architecture: "deepseek-v4"
+    path: "D:/jarvis-models/deepseek/v4-flash-mlx-4bit"
+    size_gb: 145.0
+    quantization: "mlx_4bit"
+    context_length: 1048576
+    load_policy: "archived"
+    hardware_requirement: "Apple Silicon (M3/M4 Ultra)"
+    note: "Optional Apple Silicon backup plan. Only download if Mac Studio path is committed to."
+
 specialists:
   chemistry:
     model_id: "AI4Chem/ChemLLM-7B-Chat"

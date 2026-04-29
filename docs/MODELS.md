@@ -145,6 +145,30 @@ These adapters are hot-swapped at runtime when the router detects HEP-specific c
 | **License** | Apache 2.0 |
 | **Load policy** | On-demand from SSD |
 
+### Deferred Backends (Archived to External SSD)
+
+These models are downloaded and stored on `D:\jarvis-models\` but are not runnable on the current DGX Spark target (128 GB unified RAM). They are kept locally as future-proofing — once hardware is upgraded, flipping `load_policy` in `configs/models.yaml` activates them.
+
+| Model | Source | Storage Size | Activated / Total | Hardware Required | Status |
+|-------|--------|--------------|-------------------|--------------------|--------|
+| **DeepSeek-V4-Flash** | `deepseek-ai/DeepSeek-V4-Flash` | ~150 GB | 13B / 292B (MoE) | Mac Studio M3 Ultra 256GB, 2× H100 80GB, or DGX Station | Archived, plug-in ready |
+| **DeepSeek-V4-Pro** | `deepseek-ai/DeepSeek-V4-Pro` | ~850 GB | 49B / 1.6T (MoE) | DGX Station GB300, 8× H100, or 4× Mac Studio cluster | Archival only |
+| **DeepSeek-V4-Flash MLX 4-bit** | `mlx-community/DeepSeek-V4-Flash-4bit` | ~145 GB | 13B / 292B (MoE) | Apple Silicon (M3/M4 Ultra) | Optional |
+
+**Key facts about V4:**
+
+- Released 2026-04-24 (preview). MIT-licensed open weights.
+- 1M token context via hybrid attention (CSA + HCA): 27% inference FLOPs and 10% KV cache vs V3.2 at 1M context.
+- Trained on 32T tokens. Mixed FP4+FP8 native precision.
+- **Sub-Q4 quantization is NOT viable** — experts already at 4-bit, no headroom. Native FP4 is the smallest safe form.
+- Benchmarks: V4-Pro LiveCodeBench 93.5, IMOAnswerBench 89.8, AIME ~94. Beats Claude Opus 4.6 on most coding/math.
+
+**Why archive locally:** DeepSeek has pulled weights from HF before. MIT-licensed mirrors will exist but aren't guaranteed at the official path. Local archive guarantees access regardless.
+
+**Download:** `pwsh scripts\archive_v4_to_ssd.ps1 -Preflight` then `-Phase 1/2/3` (see script header).
+
+---
+
 ### Future Specialists (Not Yet Integrated)
 
 | Model | Domain | Params | FP4 Size | Source | Priority |
