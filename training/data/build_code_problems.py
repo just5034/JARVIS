@@ -224,7 +224,8 @@ def load_livecodebench_subset(benchmarks_dir: Path, max_count: int = 200) -> lis
     we degrade JARVIS's general code score. A modest LCB tail keeps the
     distribution honest.
     """
-    lcb_path = benchmarks_dir / "livecodebench" / "livecodebench.jsonl"
+    # Canonical path used by training.eval.run_livecode and download_benchmarks.
+    lcb_path = benchmarks_dir / "livecode" / "livecode_bench.jsonl"
     if not lcb_path.exists():
         print(f"  WARNING: LiveCodeBench data not found at {lcb_path}")
         return []
@@ -236,9 +237,18 @@ def load_livecodebench_subset(benchmarks_dir: Path, max_count: int = 200) -> lis
             if not line:
                 continue
             row = json.loads(line)
+            # download_benchmarks normalizes question_content -> description.
+            problem_text = (
+                row.get("problem")
+                or row.get("description")
+                or row.get("question_content")
+                or ""
+            )
+            if not problem_text:
+                continue
             problems.append({
                 "id": f"lcb_{len(problems)}",
-                "problem": row.get("problem") or row.get("question_content") or "",
+                "problem": problem_text,
                 "domain": "general_code",
                 "difficulty": row.get("difficulty", "medium"),
                 "source": "livecodebench",
