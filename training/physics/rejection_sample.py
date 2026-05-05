@@ -40,19 +40,50 @@ from pathlib import Path
 
 
 def extract_answer(trace: str) -> str | None:
-    """Extract the final answer from a reasoning trace."""
-    # Try boxed
-    match = re.search(r"\\boxed\{([^}]*)\}", trace)
-    if match:
-        return match.group(1).strip()
+    """Extract the final answer from a reasoning trace.
 
-    # Try "the answer is X"
+    Multi-choice problems (GPQA, MMLU) — Qwen3.5 typically concludes with
+    one of: ``**Answer:** (B)``, ``**Final Answer:** (B)``,
+    ``The correct option is **(B)**``, ``matches option (A)``, or
+    ``\\boxed{B}``. We extract just the letter A-D and return it
+    upper-cased so the comparison against single-letter ground truth
+    succeeds.
+
+    Free-form problems — fall back to ``\\boxed{X}`` (any value) or
+    ``the answer is X``. The legacy ``= X at end of line`` heuristic was
+    removed because it spuriously matched equations inside the trace
+    body (e.g. ``\\tau_2 = 10^{-8}`` was being returned as the answer).
+
+    We search the trace TAIL (last ~2000 chars) because that's where the
+    conclusion lives; in-body mentions of letters like ``(A)`` are noise.
+    """
+    tail = trace[-2000:] if len(trace) > 2000 else trace
+
+    # Multi-choice letter patterns. Take the LAST match in the tail.
+    mc_patterns = [
+        r"\\boxed\{\s*\(?([A-D])\)?\s*\}",
+        r"(?i)\bfinal\s+answer[\s:.\*]+\s*\**\(?([A-D])\)?",
+        r"(?i)\banswer[\s:.\*]+\s*\**\(?([A-D])\)?(?:[\s\*\.]|$)",
+        r"(?i)correct\s+(?:option|answer|choice)\s+is\s+\**\(?([A-D])\)?",
+        r"(?i)\bmatches\s+(?:option\s+)?\**\(?([A-D])\)?",
+    ]
+    best_letter = None
+    best_pos = -1
+    for pat in mc_patterns:
+        for m in re.finditer(pat, tail):
+            if m.start() > best_pos:
+                best_pos = m.start()
+                best_letter = m.group(1).upper()
+    if best_letter:
+        return best_letter
+
+    # Free-form: \boxed{X}
+    matches = list(re.finditer(r"\\boxed\{([^}]*)\}", trace))
+    if matches:
+        return matches[-1].group(1).strip()
+
+    # Free-form: "the answer is X"
     match = re.search(r"[Tt]he (?:final )?answer is[:\s]+(.+?)[\.\n]", trace)
-    if match:
-        return match.group(1).strip()
-
-    # Try "= X" at end
-    match = re.search(r"=\s*(.+?)\s*$", trace.strip(), re.MULTILINE)
     if match:
         return match.group(1).strip()
 
