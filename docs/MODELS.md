@@ -2,6 +2,9 @@
 
 All models used in JARVIS, their sources, sizes, and deployment details.
 
+> **See also:** `docs/MODEL_LANDSCAPE_2026-09.md` — Qwen3.8-27B supersedes the base model
+> described here (GPQA-D 89.2 vs 85.5, LiveCodeBench v6 90.3 vs 80.7). Migration pending.
+
 ---
 
 ## Core Brain
@@ -19,7 +22,7 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 | **License** | Apache 2.0 |
 | **Training** | Optional HEP-specific LoRA (see below) |
 | **Roles** | Physics, Math, Code, General |
-| **Benchmarks** | GPQA Diamond: 86%, AIME 2026: 81%, LiveCodeBench: 80.7% |
+| **Benchmarks** | Official card: GPQA Diamond 85.5, AIME 2026 90.83, LiveCodeBench v6 80.7, SWE-bench Verified 72.4, MMLU-Pro 86.1. Measured on Delta: GPQA 85.4, AIME 89.2, LiveCodeBench 82.5. |
 | **Notes** | Single model replaces previous dual-base setup (R1-Distill-Qwen-32B + Qwen2.5-Coder-32B) |
 
 **Why a single base:** Qwen3.5-27B exceeds our original targets across all benchmarks out-of-the-box. A single 14 GB model (FP4) replaces two 16 GB models, freeing ~18 GB of RAM for specialists, KV cache, and longer context. The inference amplification layer (best-of-N, ThinkPRM, S* verification) provides additional accuracy gains on top of the strong baseline.
@@ -31,7 +34,13 @@ All models used in JARVIS, their sources, sizes, and deployment details.
 | `hep_physics` | qwen35_27b | Particle physics, detector design, scintillator properties, kinematics | 0.3 GB |
 | `hep_code` | qwen35_27b | Geant4, ROOT, Pythia8, GDML patterns, HEP analysis idioms | 0.3 GB |
 
-These adapters are hot-swapped at runtime when the router detects HEP-specific content. General physics/math/code queries use the base model without any adapter.
+>  **STATUS 2026-09-09 — NOT IMPLEMENTED.** These adapters do not exist yet, and the
+>  serving stack cannot load them. `brain_manager.swap_adapter` records the adapter name in
+>  a dictionary that no generation path reads; `model_loader` builds vLLM without
+>  `enable_lora`. See `docs/FRAMEWORK_AUDIT_2026-09.md` §2. The description below is the
+>  intended design, not current behavior.
+
+The intended design: adapters are hot-swapped at runtime when the router detects HEP-specific content. General physics/math/code queries use the base model without any adapter.
 
 ### Previous Models (Deprecated)
 
